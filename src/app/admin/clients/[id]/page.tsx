@@ -10,6 +10,8 @@ import { DeleteClientForm, InviteForm } from "./ClientForms";
 import { resyncAction, setStatusAction } from "./actions";
 import { AgentAdminCard } from "./AgentAdminCard";
 import { loadCatalog } from "@/lib/voice/catalog";
+import { isTwilioConfigured, listOwnedNumbers, type OwnedNumber } from "@/lib/telephony/twilio";
+import { NumbersPanel } from "./NumbersPanel";
 
 export default async function ClientPage({ params }: { params: Promise<{ id: string }> }) {
   await requireAdmin();
@@ -20,8 +22,8 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
   if (!client) notFound();
 
   const [{ data: agents }, { data: phones }, { data: members }, { count: knowledgeCount }, { count: connected }] = await Promise.all([
-    db.from("agents").select("id, client_id, type_key, name, status, voice_id, opening_line, sync_status, sync_error, llm_model_override, custom_prompt, provider_agent_id").eq("client_id", id).order("created_at"),
-    db.from("phone_numbers").select("id, client_id, e164, agent_id, is_primary, label").eq("client_id", id),
+    db.from("agents").select("id, client_id, type_key, name, status, voice_id, opening_line, sync_status, sync_error, llm_model_override, realtime_model_override, custom_prompt, provider_agent_id").eq("client_id", id).order("created_at"),
+    db.from("phone_numbers").select("id, client_id, e164, agent_id, is_primary, label, route_error, provider_phone_id").order("created_at").eq("client_id", id),
     db.from("client_members").select("user_id, created_at, profiles:user_id(email, full_name)").eq("client_id", id),
     db.from("knowledge_items").select("id", { count: "exact", head: true }).eq("client_id", id),
     db.from("connections").select("id", { count: "exact", head: true }).eq("client_id", id).eq("status", "connected"),
@@ -29,6 +31,16 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
   const agentList = (agents ?? []) as AgentRow[];
   const catalog = await loadCatalog();
   const phoneList = (phones ?? []) as PhoneRow[];
+  let owned: OwnedNumber[] = [];
+  let ownedError: string | undefined;
+  if (!isTwilioConfigured()) ownedError = "Twilio עוד לא מחובר, אפשר להקליד מספר ידנית.";
+  else
+    owned = await listOwnedNumbers()
+      .then((list) => list.filter((n) => n.voice))
+      .catch((e: unknown) => {
+        ownedError = e instanceof Error ? e.message : "לא הצלחנו לטעון מספרים מ־Twilio";
+        return [];
+      });
   type Member = { user_id: string; profiles: { email: string; full_name: string } | null };
   const memberList = (members ?? []) as unknown as Member[];
 
@@ -101,22 +113,14 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
       </Panel>
 
       <div className="grid gap-6 lg:grid-cols-2">
-        <Panel title="מספרים וניתוב">
-          {phoneList.length === 0 ? (
-            <p className="text-[16px] text-ink-muted">אין עדיין מספר. מספרים נקנים ב־Twilio ומוקצים לעסק אחד בלבד.</p>
-          ) : (
-            <ul className="divide-y divide-border">
-              {phoneList.map((p) => (
-                <li key={p.id} className="flex min-h-14 items-center justify-between gap-3">
-                  <span className="num text-[17px] text-ink">{p.e164}</span>
-                  <span className="text-[14px] text-ink-muted">
-                    {p.is_primary ? "ראשי · " : ""}
-                    {agentList.find((a) => a.id === p.agent_id)?.name ?? "לא משויך לסוכן"}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
+        <Panel title="מספרים וניתוב" subtitle="כל מספר עונה עם סוכן אחד. סוכן בלי מספר משלו מתקשר החוצה מהמספר הראשי.">
+          <NumbersPanel
+            clientId={client.id}
+            phones={phoneList}
+            agents={agentList.map((a) => ({ id: a.id, name: a.name, active: a.status === "active" }))}
+            owned={owned.map(({ sid, number, friendly }) => ({ sid, number, friendly }))}
+            ownedError={ownedError}
+          />
         </Panel>
 
         <Panel title="משתמשים והזמנות">

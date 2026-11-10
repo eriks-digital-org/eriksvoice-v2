@@ -100,6 +100,8 @@ export interface AgentConfig {
   llm: string;
   voiceId: string;
   ttsModel: string;
+  /** Eleven Realtime model, or null for the custom pipeline (LLM + speech model). */
+  realtimeModel: string | null;
   voiceSettings: { stability?: number; speed?: number; similarity_boost?: number };
   turn: { turn_timeout?: number; turn_eagerness?: string; silence_end_call_timeout?: number };
   knowledge: KnowledgeRef[];
@@ -112,8 +114,15 @@ function body(c: AgentConfig) {
     knowledge_base: c.knowledge.map((k) => ({ type: "text", id: k.id, name: k.name, usage_mode: "auto" })),
     rag: { enabled: c.knowledge.length > 0, embedding_model: "multilingual_e5_large_instruct" },
   };
-  if (c.llm) prompt.llm = c.llm;
-  const tts: Record<string, unknown> = { model_id: c.ttsModel, ...c.voiceSettings };
+  // In Realtime mode the provider manages the LLM and the speech model, so we don't send them.
+  // NOTE: the documented param is `realtime_model`; its place under agent.prompt follows the
+  // docs' managed-settings table and is verified against the live API.
+  if (c.realtimeModel) prompt.realtime_model = c.realtimeModel;
+  else {
+    prompt.realtime_model = null;
+    if (c.llm) prompt.llm = c.llm;
+  }
+  const tts: Record<string, unknown> = { ...(c.realtimeModel ? {} : { model_id: c.ttsModel }), ...c.voiceSettings };
   if (c.voiceId) tts.voice_id = c.voiceId;
   return {
     name: c.name,
@@ -157,4 +166,52 @@ export async function deleteKnowledge(id: string): Promise<void> {
   } catch (e) {
     if (!(e instanceof VoiceProviderError && e.status === 404)) throw e;
   }
+}
+
+/** Imports a Twilio number into the voice provider; returns the provider's phone id. */
+export async function importTwilioNumber(n: { number: string; label: string; sid: string; token: string }): Promise<string> {
+  const r = await call<{ phone_number_id: string }>("/v1/convai/phone-numbers", {
+    method: "POST",
+    body: JSON.stringify({ provider: "twilio", phone_number: n.number, label: n.label.slice(0, 60), sid: n.sid, token: n.token }),
+  });
+  return r.phone_number_id;
+}
+
+/** Which agent answers this number (null: nobody). */
+export async function routeNumber(phoneId: string, agentId: string | null): Promise<void> {
+  await call(`/v1/convai/phone-numbers/${encodeURIComponent(phoneId)}`, {
+    method: "PATCH",
+    body: JSON.stringify({ agent_id: agentId }),
+  });
+}
+
+export async function deleteNumber(phoneId: string): Promise<void> {
+  try {
+    await call(`/v1/convai/phone-numbers/${encodeURIComponent(phoneId)}`, { method: "DELETE" });
+  } catch (e) {
+    if (!(e instanceof VoiceProviderError && e.status === 404)) throw e;
+  }
+}
+
+/** An outbound call by an agent from one of its numbers. */
+export async function outboundCall(o: {
+  agentId: string;
+  phoneId: string;
+  to: string;
+  variables?: Record<string, string>;
+}): Promise<{ conversationId: string | null; callSid: string | null }> {
+  const r = await call<{ success?: boolean; message?: string; conversation_id?: string | null; callSid?: string | null }>(
+    "/v1/convai/twilio/outbound-call",
+    {
+      method: "POST",
+      body: JSON.stringify({
+        agent_id: o.agentId,
+        agent_phone_number_id: o.phoneId,
+        to_number: o.to,
+        ...(o.variables ? { conversation_initiation_client_data: { dynamic_variables: o.variables } } : {}),
+      }),
+    },
+  );
+  if (r.success === false) throw new VoiceProviderError(`השיחה לא יצאה: ${r.message ?? ""}`.trim());
+  return { conversationId: r.conversation_id ?? null, callSid: r.callSid ?? null };
 }
