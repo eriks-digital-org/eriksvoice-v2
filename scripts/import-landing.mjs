@@ -44,6 +44,15 @@ html = html.replace(
   '$1\n            <li><a href="/login"><b>11</b>כניסה למערכת</a></li>',
 );
 
+// The contact form sends to /api/public/contact (public/landing/contact.js, kept across imports),
+// with a hidden field that only bots fill.
+html = html
+  .replace(
+    '<form class="start__form" novalidate>',
+    '<form class="start__form" novalidate>\n            <input type="text" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0" />',
+  )
+  .replace('</body>', '    <script src="/landing/contact.js" defer></script>\n  </body>');
+
 mkdirSync(join(out, 'landing'), { recursive: true });
 writeFileSync(join(out, 'landing/index.html'), html);
 
