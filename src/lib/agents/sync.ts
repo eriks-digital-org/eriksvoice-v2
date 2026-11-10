@@ -130,7 +130,7 @@ export function realtimeFor(override: string | null, typeModel: string | null | 
 
 /** Brings every active agent of a client up to date with the voice provider. */
 export async function syncClient(clientId: string): Promise<SyncResult> {
-  if (!voice.isVoiceConfigured()) return { ok: true };
+  if (!(await voice.isVoiceConfigured())) return { ok: true };
   const db = createAdminClient();
   const { data } = await db.from("agents").select(AGENT_COLUMNS).eq("client_id", clientId).neq("status", "draft");
   const agents = (data ?? []) as AgentFull[];
@@ -161,7 +161,7 @@ export async function syncClient(clientId: string): Promise<SyncResult> {
 
 /** After a change to an agent type: every client with an active agent of that type. */
 export async function syncType(typeKey: string): Promise<{ failed: number }> {
-  if (!voice.isVoiceConfigured()) return { failed: 0 };
+  if (!(await voice.isVoiceConfigured())) return { failed: 0 };
   const db = createAdminClient();
   const { data } = await db.from("agents").select("client_id").eq("type_key", typeKey).neq("status", "draft");
   let failed = 0;
@@ -173,7 +173,7 @@ export async function syncType(typeKey: string): Promise<{ failed: number }> {
 
 /** After a change to the shared safety rules: every client with an active agent. */
 export async function syncAll(): Promise<{ failed: number }> {
-  if (!voice.isVoiceConfigured()) return { failed: 0 };
+  if (!(await voice.isVoiceConfigured())) return { failed: 0 };
   const db = createAdminClient();
   const { data } = await db.from("agents").select("client_id").neq("status", "draft");
   let failed = 0;
@@ -188,7 +188,7 @@ export async function syncAll(): Promise<{ failed: number }> {
  * provider. Nothing is sent before.
  */
 export async function activateAgent(agentId: string): Promise<SyncResult> {
-  if (!voice.isVoiceConfigured()) return { ok: false, error: "שירות הקול עוד לא מחובר (ELEVENLABS_API_KEY ב־Vercel)." };
+  if (!(await voice.isVoiceConfigured())) return { ok: false, error: "שירות הקול עוד לא מחובר. מגדירים מפתח בהגדרות ← ספקים." };
   const db = createAdminClient();
   const { data: agent } = await db.from("agents").select("client_id, status").eq("id", agentId).single();
   if (!agent) return { ok: false, error: "הסוכן לא נמצא" };
@@ -216,7 +216,7 @@ export async function pauseAgent(agentId: string): Promise<SyncResult> {
 
 /** Before a client is deleted: its agents and documents at the provider. */
 export async function removeClientFromProvider(clientId: string): Promise<SyncResult> {
-  if (!voice.isVoiceConfigured()) return { ok: true };
+  if (!(await voice.isVoiceConfigured())) return { ok: true };
   const db = createAdminClient();
   const [{ data: agents }, { data: items }, { data: numbers }] = await Promise.all([
     db.from("agents").select("provider_agent_id").eq("client_id", clientId).not("provider_agent_id", "is", null),

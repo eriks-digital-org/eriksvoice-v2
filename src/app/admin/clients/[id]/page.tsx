@@ -33,7 +33,7 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
   const phoneList = (phones ?? []) as PhoneRow[];
   let owned: OwnedNumber[] = [];
   let ownedError: string | undefined;
-  if (!isTwilioConfigured()) ownedError = "Twilio עוד לא מחובר, אפשר להקליד מספר ידנית.";
+  if (!(await isTwilioConfigured())) ownedError = "Twilio עוד לא מחובר, אפשר להקליד מספר ידנית.";
   else
     owned = await listOwnedNumbers()
       .then((list) => list.filter((n) => n.voice))
@@ -107,7 +107,7 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
       >
         <ul className="grid gap-3 lg:grid-cols-2">
           {agentList.map((a) => (
-            <AgentAdminCard key={a.id} agent={a} voices={catalog.voices} llms={catalog.llms} />
+            <AgentAdminCard key={a.id} agent={a} voices={catalog.voices.filter((v) => v.source === "account")} llms={catalog.llms} />
           ))}
         </ul>
       </Panel>

@@ -165,7 +165,7 @@ export async function testCallAction(_: ActionState, form: FormData): Promise<Ac
   if (!number.provider_phone_id) {
     // Not imported yet (it has no active agent): import it now so the agent can call out from it.
     try {
-      const { sid, token } = twilioCredentials();
+      const { sid, token } = await twilioCredentials();
       const phoneId = await voice.importTwilioNumber({ number: number.e164, label: number.e164, sid, token });
       await db.from("phone_numbers").update({ provider_phone_id: phoneId }).eq("id", number.id);
       await voice.routeNumber(phoneId, null);
