@@ -35,6 +35,14 @@ export const PROVIDERS: ProviderDef[] = [
         placeholder: "wsec_…",
         hint: "Agents ← Settings ← Webhooks, לכתובת https://eriksvoice.co.il/api/public/voice/webhook",
       },
+      {
+        name: "elevenlabs_initiation_secret",
+        env: "ELEVENLABS_INITIATION_SECRET",
+        label: "סוד לזיהוי מתקשר",
+        secret: true,
+        optional: true,
+        hint: "סוד שבוחרים בעצמכם. ב־Agents ← Settings מגדירים Conversation initiation webhook לכתובת https://eriksvoice.co.il/api/public/voice/initiation עם כותרת X-EriksVoice-Key והסוד הזה",
+      },
     ],
   },
   {

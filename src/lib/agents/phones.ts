@@ -2,6 +2,7 @@ import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import * as voice from "@/lib/voice/elevenlabs";
 import { isTwilioConfigured, twilioCredentials } from "@/lib/telephony/twilio";
+import { callerVariables } from "@/lib/calls/caller";
 
 const message = (e: unknown) => (e instanceof Error ? e.message : "שגיאה לא צפויה");
 
@@ -93,7 +94,9 @@ export async function callOut(
       await voice.routeNumber(phoneId, null);
       number = { ...number, provider_phone_id: phoneId };
     }
-    const r = await voice.outboundCall({ agentId: agent.provider_agent_id, phoneId: number.provider_phone_id as string, to, variables });
+    // The same caller variables as inbound calls, so a prompt that uses them works both ways.
+    const known = await callerVariables(agent.client_id as string, to).catch(() => ({}));
+    const r = await voice.outboundCall({ agentId: agent.provider_agent_id, phoneId: number.provider_phone_id as string, to, variables: { ...known, ...variables } });
     const callId = await record({ provider_conversation_id: r.conversationId, call_sid: r.callSid, status: "calling", summary: "" });
     return { ok: true, from: number.e164, conversationId: r.conversationId, callId };
   } catch (e) {

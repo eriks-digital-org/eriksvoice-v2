@@ -185,3 +185,25 @@ export async function flowUrlAction(form: FormData) {
     .upsert({ client_id: clientId, kind: "activepieces", flow_url: url || null, status: url ? "configured" : "off" }, { onConflict: "client_id,kind" });
   revalidatePath(`/admin/clients/${clientId}`);
 }
+
+/** The admin sets a client's connection status after connecting it in Activepieces (and testing). */
+export async function connectionStatusAction(form: FormData) {
+  await requireAdmin();
+  const clientId = String(form.get("client_id"));
+  const kind = String(form.get("kind"));
+  const status = String(form.get("status"));
+  if (!["off", "requested", "configured", "connected", "error"].includes(status)) return;
+  const note = String(form.get("note") ?? "").trim().slice(0, 300);
+  const db = createAdminClient();
+  await db.from("connections").upsert(
+    {
+      client_id: clientId,
+      kind,
+      status,
+      last_error: status === "error" ? note || null : null,
+      ...(status === "connected" ? { tested_at: new Date().toISOString() } : {}),
+    },
+    { onConflict: "client_id,kind" },
+  );
+  revalidatePath(`/admin/clients/${clientId}`);
+}
