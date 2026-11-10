@@ -3,6 +3,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
 import * as voice from "@/lib/voice/elevenlabs";
 import { settleFromCall } from "@/lib/dialer/run";
+import { notify } from "@/lib/notify";
 
 /**
  * Verifies the provider's webhook signature: header "t=<unix>,v0=<hex>", where
@@ -91,22 +92,9 @@ async function checkQuota(clientId: string) {
   if (used < client.monthly_minutes * 0.8) return;
   const pct = Math.round((used / client.monthly_minutes) * 100);
   await db.from("clients").update({ quota_alerted_month: month }).eq("id", clientId);
-  await db.from("notifications").insert([
-    {
-      client_id: clientId,
-      kind: "quota",
-      title: `נוצלו ${pct}% מדקות החודש`,
-      body: `${used} מתוך ${client.monthly_minutes} דקות.`,
-      link: `/${client.slug}/usage`,
-    },
-    {
-      client_id: null,
-      kind: "quota",
-      title: `${client.name}: ${pct}% מדקות החודש`,
-      body: `${used} מתוך ${client.monthly_minutes} דקות.`,
-      link: `/admin/clients/${clientId}`,
-    },
-  ]);
+  const body = `${used} מתוך ${client.monthly_minutes} דקות.`;
+  await notify({ clientId, kind: "quota", title: `נוצלו ${pct}% מדקות החודש`, body, link: `/${client.slug}/usage`, email: true });
+  await notify({ clientId: null, kind: "quota", title: `${client.name}: ${pct}% מדקות החודש`, body, link: `/admin/clients/${clientId}`, email: true });
 }
 
 /** Pulls recent conversations of a client's agents (for calls the webhook missed). */

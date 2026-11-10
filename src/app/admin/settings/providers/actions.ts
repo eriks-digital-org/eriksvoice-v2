@@ -36,13 +36,13 @@ export async function saveProviderAction(_: ProviderState, form: FormData): Prom
   }
   if (def.key === "elevenlabs") resetCatalog();
   revalidatePath("/admin/settings/providers");
-  const test = await testProvider(def.key);
+  const test = await testProvider(def.key, access.email);
   return { ok: clear ? "הוסר. המערכת חוזרת לערך מ־Vercel, אם יש." : "נשמר", test };
 }
 
 export async function testProviderAction(_: ProviderState, form: FormData): Promise<ProviderState> {
-  await requireAdmin();
+  const access = await requireAdmin();
   const def = PROVIDERS.find((p) => p.key === form.get("provider"));
   if (!def) return { error: "ספק לא מוכר" };
-  return { test: await testProvider(def.key) };
+  return { test: await testProvider(def.key, access.email) };
 }

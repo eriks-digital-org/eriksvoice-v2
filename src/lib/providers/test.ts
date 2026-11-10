@@ -1,5 +1,6 @@
 import "server-only";
 import { getSecret } from "./secrets";
+import { sendMail } from "@/lib/notify/mail";
 import type { ProviderDef } from "./registry";
 
 export type TestResult = { ok: boolean; message: string };
@@ -8,7 +9,7 @@ const get = async (url: string, headers: Record<string, string>) =>
   fetch(url, { headers, signal: AbortSignal.timeout(15_000), cache: "no-store" }).catch(() => null);
 
 /** A light read-only call per provider, to check the saved keys work. */
-export async function testProvider(key: ProviderDef["key"]): Promise<TestResult> {
+export async function testProvider(key: ProviderDef["key"], adminEmail?: string): Promise<TestResult> {
   switch (key) {
     case "elevenlabs": {
       const k = await getSecret("elevenlabs_api_key");
@@ -33,8 +34,13 @@ export async function testProvider(key: ProviderDef["key"]): Promise<TestResult>
     }
     case "utobo": {
       const k = await getSecret("utobo_api_key");
-      // Utobo has no read-only endpoint we can call without sending mail.
-      return k ? { ok: true, message: "המפתח שמור. הבדיקה המלאה היא שליחת מייל." } : { ok: false, message: "אין מפתח" };
+      if (!k) return { ok: false, message: "אין מפתח" };
+      if (!adminEmail) return { ok: true, message: "המפתח שמור" };
+      // Utobo has no read-only endpoint, so the test is a real email to the admin.
+      const sent = await sendMail([adminEmail], "בדיקת מייל מ־EriksVoice", "אם המייל הזה הגיע, שליחת המיילים מהמערכת עובדת.");
+      return sent
+        ? { ok: true, message: `נשלח מייל בדיקה ל־${adminEmail}` }
+        : { ok: false, message: "השליחה נכשלה. בודקים את המפתח ושהדומיין eriksvoice.co.il מאומת ב־Utobo." };
     }
     case "activepieces": {
       const url = (await getSecret("activepieces_url"))?.replace(/\/+$/, "");
