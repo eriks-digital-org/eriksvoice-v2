@@ -1,0 +1,26 @@
+# Runs the database migrations (supabase/migrations) on the Supabase project
+# whenever they change on main. Needs the repository secret SUPABASE_DB_URL
+# (Supabase → Connect → Session pooler → URI, with the database password).
+name: Database migrations
+
+on:
+  push:
+    branches: [main]
+    paths: ["supabase/migrations/**"]
+  workflow_dispatch:
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    concurrency: migrations
+    steps:
+      - uses: actions/checkout@v4
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - name: Apply migrations
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          if [ -z "$SUPABASE_DB_URL" ]; then echo "SUPABASE_DB_URL secret is not set"; exit 1; fi
+          supabase db push --db-url "$SUPABASE_DB_URL" --include-all --yes

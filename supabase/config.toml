@@ -1,0 +1,3 @@
+# Supabase CLI settings. The project itself is linked by its connection string
+# (SUPABASE_DB_URL), see .github/workflows/migrations.yml.
+project_id = "eriksvoice"
