@@ -1,11 +1,15 @@
 import { NextResponse } from "next/server";
 import { runDialer } from "@/lib/dialer/run";
+import { getSecret } from "@/lib/providers/secrets";
 
 export const maxDuration = 60;
 
-/** Vercel Cron, every minute (vercel.json). Vercel sends "Authorization: Bearer $CRON_SECRET". */
+/**
+ * Called every minute by the database scheduler (pg_cron + pg_net, see the dialer_schedule
+ * migration) with "Authorization: Bearer <ev_cron_secret from Vault>".
+ */
 export async function GET(req: Request) {
-  const secret = process.env.CRON_SECRET;
+  const secret = (await getSecret("cron_secret")) ?? process.env.CRON_SECRET;
   if (!secret || req.headers.get("authorization") !== `Bearer ${secret}`) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
