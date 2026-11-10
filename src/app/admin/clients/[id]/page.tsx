@@ -35,18 +35,8 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
   const connOf = (kind: string) => (conns ?? []).find((c) => c.kind === kind) as { status: ConnStatus; last_error: string | null; requested_at: string | null } | undefined;
   const site = process.env.NEXT_PUBLIC_SITE_URL ?? "https://eriksvoice.co.il";
   const agentList = (agents ?? []) as AgentRow[];
-  const catalog = await loadCatalog();
   const phoneList = (phones ?? []) as PhoneRow[];
-  let owned: OwnedNumber[] = [];
-  let ownedError: string | undefined;
-  if (!(await isTwilioConfigured())) ownedError = "Twilio עוד לא מחובר, אפשר להקליד מספר ידנית.";
-  else
-    owned = await listOwnedNumbers()
-      .then((list) => list.filter((n) => n.voice))
-      .catch((e: unknown) => {
-        ownedError = e instanceof Error ? e.message : "לא הצלחנו לטעון מספרים מ־Twilio";
-        return [];
-      });
+  const [catalog, { owned, ownedError }] = await Promise.all([loadCatalog(), loadOwnedNumbers()]);
   type Member = { user_id: string; profiles: { email: string; full_name: string } | null };
   const memberList = (members ?? []) as unknown as Member[];
 
@@ -203,4 +193,14 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
       </Panel>
     </div>
   );
+}
+
+/** Twilio's voice numbers for the numbers panel, or why they couldn't be loaded. */
+async function loadOwnedNumbers(): Promise<{ owned: OwnedNumber[]; ownedError?: string }> {
+  if (!(await isTwilioConfigured())) return { owned: [], ownedError: "Twilio עוד לא מחובר, אפשר להקליד מספר ידנית." };
+  try {
+    return { owned: (await listOwnedNumbers()).filter((n) => n.voice) };
+  } catch (e) {
+    return { owned: [], ownedError: e instanceof Error ? e.message : "לא הצלחנו לטעון מספרים מ־Twilio" };
+  }
 }

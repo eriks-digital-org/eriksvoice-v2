@@ -9,9 +9,11 @@
 //   node <this repo>/scripts/import-landing.mjs <website folder>
 //
 // vite.voice.config.js is in scripts/landing/ in this repo; copy it into the
-// website folder first. Links to the rest of the website point to eriks.co.il.
+// website folder first. The page is then stripped to the system alone: no menu
+// and no links to the website or to other pages (scripts/landing/strip.mjs).
 import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { stripLanding } from './landing/strip.mjs';
 
 const site = resolve(process.argv[2] ?? '.');
 const dist = join(site, 'dist-voice');
@@ -21,28 +23,19 @@ if (!existsSync(join(dist, 'voice/index.html'))) {
   process.exit(1);
 }
 
-const MAIN_SITE = 'https://eriks.co.il';
 let html = readFileSync(join(dist, 'voice/index.html'), 'utf8');
 
-// Links to other pages of the website go to eriks.co.il; this page is "/".
-html = html
-  .replace(/href="\/voice\/"/g, 'href="/"')
-  .replace(/href="\/(#[\w-]+)"/g, `href="${MAIN_SITE}/$1"`)
-  .replace(/href="\/((?:crm|blog|terms|privacy|accessibility)\/)"/g, `href="${MAIN_SITE}/$1"`)
-  .replace(/(<a class="nav__brand") href="\/"/, `$1 href="${MAIN_SITE}/"`)
-  .replace(/(<p class="svc-crumb"><a) href="\/"/, `$1 href="${MAIN_SITE}/"`)
-  // "התחברות ללקוחות" opens the system's login (on the website it said "soon").
-  .replace(/href="#" data-login/g, 'href="/login"');
+// "התחברות ללקוחות" opens the system's login (on the website it said "soon").
+html = stripLanding(html.replace(/href="#" data-login/g, 'href="/login"'));
 
-// A way into the system: "כניסה" in the top links and in the menu.
-html = html.replace(
-  /(<nav class="nav__links"[^>]*>)/,
-  '$1\n          <a href="/login">כניסה</a>',
-);
-html = html.replace(
-  /(<li><a href="#contact"><b>10<\/b>צור קשר<\/a><\/li>)/,
-  '$1\n            <li><a href="/login"><b>11</b>כניסה למערכת</a></li>',
-);
+// The contact form sends to /api/public/contact (public/landing/contact.js, kept across imports),
+// with a hidden field that only bots fill.
+html = html
+  .replace(
+    '<form class="start__form" novalidate>',
+    '<form class="start__form" novalidate>\n            <input type="text" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0" />',
+  )
+  .replace('</body>', '    <script src="/landing/contact.js" defer></script>\n  </body>');
 
 mkdirSync(join(out, 'landing'), { recursive: true });
 writeFileSync(join(out, 'landing/index.html'), html);

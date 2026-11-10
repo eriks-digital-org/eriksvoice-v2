@@ -25,9 +25,12 @@ export const getAccess = cache(async (): Promise<Access | null> => {
   await cookies(); // always per request, also before Supabase is connected
   if (!isSupabaseConfigured) return null;
   const supabase = await createClient();
-  const { data: auth } = await supabase.auth.getUser();
-  const user = auth.user;
-  if (!user) return null;
+  // getClaims checks the session token's signature locally (no round trip to Supabase Auth
+  // on every screen); it falls back to asking Auth only for projects without signing keys.
+  const { data: auth } = await supabase.auth.getClaims();
+  const claims = auth?.claims;
+  if (!claims?.sub) return null;
+  const user = { id: claims.sub, email: typeof claims.email === "string" ? claims.email : undefined };
 
   const [{ data: profile }, { data: rows }] = await Promise.all([
     supabase.from("profiles").select("full_name, is_admin").eq("id", user.id).maybeSingle(),
