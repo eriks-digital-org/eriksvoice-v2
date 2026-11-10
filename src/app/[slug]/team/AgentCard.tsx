@@ -8,6 +8,7 @@ import { AgentStatusBadge } from "@/components/ds/StatusBadge";
 import { characterForType } from "@/components/agents/characters";
 import { agentTypeLabels } from "@/lib/agent-types";
 import type { AgentRow } from "@/lib/data/types";
+import { VoiceChoice } from "@/components/voice/VoiceChoice";
 import { saveAgent, type SaveState } from "./actions";
 
 export function AgentCard({
@@ -19,7 +20,7 @@ export function AgentCard({
   agent: AgentRow;
   slug: string;
   phone?: string;
-  voices: { id: string; name: string }[];
+  voices: { id: string; name: string; preview?: string | null; gender?: string }[];
 }) {
   const [state, action, pending] = useActionState<SaveState, FormData>(saveAgent, {});
   const c = characterForType(agent.type_key, agent.id);
@@ -51,14 +52,7 @@ export function AgentCard({
       </Field>
       {voices.length > 0 && (
         <Field label="קול">
-          <select name="voice_id" defaultValue={agent.voice_id ?? ""} className="h-12 w-full rounded-2xl border border-input bg-card px-3 text-[16px]">
-            {!agent.voice_id && <option value="">קול ברירת המחדל</option>}
-            {voices.map((v) => (
-              <option key={v.id} value={v.id}>
-                {v.name}
-              </option>
-            ))}
-          </select>
+          <VoiceChoice name="voice_id" voices={voices} defaultValue={agent.voice_id ?? ""} />
         </Field>
       )}
       <Field label="משפט הפתיח" hint="מה הסוכן אומר כשהוא עונה">

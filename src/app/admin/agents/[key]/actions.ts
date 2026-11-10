@@ -6,6 +6,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { AGENT_TYPE_KEYS, type AgentTypeKey } from "@/lib/agent-types";
 import { namedBusiness } from "@/lib/agents/prompt";
 import { syncType } from "@/lib/agents/sync";
+import { addLibraryVoice } from "@/lib/voice/elevenlabs";
+import { resetCatalog } from "@/lib/voice/catalog";
 import { HEBREW_TTS_MODELS, isRealtimeModel, type AllowedVoice } from "@/lib/voice/models";
 
 export type SaveState = { error?: string; ok?: string };
@@ -32,13 +34,32 @@ export async function saveAgentType(_: SaveState, form: FormData): Promise<SaveS
   const realtime = String(form.get("realtime_model") ?? "");
   if (realtime && !isRealtimeModel(realtime)) return { error: "מצב דיבור לא מוכר" };
 
-  let allowed: AllowedVoice[] = [];
+  let chosen: (AllowedVoice & { owner?: string })[] = [];
   try {
-    allowed = JSON.parse(String(form.get("allowed_voices") || "[]"));
+    chosen = JSON.parse(String(form.get("allowed_voices") || "[]"));
   } catch {
     return { error: "רשימת הקולות לא תקינה" };
   }
-  const defaultVoice = String(form.get("default_voice_id") ?? "").trim();
+  let defaultVoice = String(form.get("default_voice_id") ?? "").trim();
+  const defaultOwner = String(form.get("default_voice_owner") ?? "");
+  const defaultName = String(form.get("default_voice_name") ?? defaultVoice);
+
+  // Library voices are added to the account the first time they are chosen.
+  const added = new Map<string, string>();
+  const ensure = async (id: string, name: string, owner?: string) => {
+    if (!owner) return id;
+    if (!added.has(id)) added.set(id, await addLibraryVoice(owner, id, name));
+    return added.get(id) as string;
+  };
+  let allowed: AllowedVoice[];
+  try {
+    allowed = [];
+    for (const v of chosen) allowed.push({ id: await ensure(v.id, v.name, v.owner), name: v.name, preview: v.preview ?? null, gender: v.gender ?? "" });
+    if (defaultVoice) defaultVoice = await ensure(defaultVoice, defaultName, defaultOwner || undefined);
+  } catch (e) {
+    return { error: `הוספת קול מהספרייה נכשלה: ${e instanceof Error ? e.message : ""}` };
+  }
+  if (added.size) resetCatalog();
 
   const voiceSettings = Object.fromEntries(
     Object.entries({ stability: num(form.get("stability")), speed: num(form.get("speed")), similarity_boost: num(form.get("similarity_boost")) }).filter(

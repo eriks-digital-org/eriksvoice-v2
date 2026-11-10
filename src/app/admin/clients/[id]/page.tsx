@@ -107,7 +107,7 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
       >
         <ul className="grid gap-3 lg:grid-cols-2">
           {agentList.map((a) => (
-            <AgentAdminCard key={a.id} agent={a} voices={catalog.voices} llms={catalog.llms} />
+            <AgentAdminCard key={a.id} agent={a} voices={catalog.voices.filter((v) => v.source === "account")} llms={catalog.llms} />
           ))}
         </ul>
       </Panel>

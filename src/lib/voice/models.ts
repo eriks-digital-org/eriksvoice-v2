@@ -17,4 +17,7 @@ export const isRealtimeModel = (v: string): v is RealtimeModel => REALTIME_MODEL
 export interface AllowedVoice {
   id: string;
   name: string;
+  /** Sample to play in the client's voice picker. */
+  preview?: string | null;
+  gender?: "female" | "male" | "";
 }

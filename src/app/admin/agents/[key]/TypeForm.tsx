@@ -1,21 +1,15 @@
 "use client";
 
-import { useActionState, useMemo, useState } from "react";
-import { Check, Loader2, Play } from "lucide-react";
+import { useActionState, useState } from "react";
+import { Check, Loader2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Field } from "@/components/ds/kit";
-import { cn } from "@/lib/utils";
 import type { AgentTypeRow } from "@/lib/data/types";
 import { HEBREW_TTS_MODELS, REALTIME_MODELS, type AllowedVoice } from "@/lib/voice/models";
 import { saveAgentType, type SaveState } from "./actions";
+import { VoicePicker, type ChosenVoice, type PickerVoice } from "./VoicePicker";
 
-interface Voice {
-  id: string;
-  name: string;
-  description: string;
-  previewUrl: string | null;
-}
 
 const selectCls = "h-12 w-full rounded-2xl border border-input bg-card px-3 text-[16px]";
 
@@ -27,31 +21,28 @@ export function TypeForm({
   catalogError,
 }: {
   type: AgentTypeRow & { allowed_voices: AllowedVoice[]; tts_model: string };
-  voices: Voice[];
+  voices: PickerVoice[];
   llms: string[];
   connected: boolean;
   catalogError?: string;
 }) {
   const [state, action, pending] = useActionState<SaveState, FormData>(saveAgentType, {});
-  const [allowed, setAllowed] = useState<AllowedVoice[]>(type.allowed_voices ?? []);
-  const [defaultVoice, setDefaultVoice] = useState(type.default_voice_id);
-  const [filter, setFilter] = useState("");
+  const [allowed, setAllowed] = useState<ChosenVoice[]>(type.allowed_voices ?? []);
+  const [defaultVoice, setDefaultVoice] = useState<ChosenVoice>({
+    id: type.default_voice_id,
+    name: type.allowed_voices?.find((v) => v.id === type.default_voice_id)?.name ?? type.default_voice_id,
+  });
   const input = "h-12 rounded-2xl text-[16px]";
   const vs = (type.voice_settings ?? {}) as Record<string, number>;
   const turn = (type.conversation_settings ?? {}) as Record<string, string | number>;
-
-  const shown = useMemo(() => {
-    const f = filter.trim().toLowerCase();
-    return f ? voices.filter((v) => `${v.name} ${v.description}`.toLowerCase().includes(f)) : voices;
-  }, [voices, filter]);
-  const toggle = (v: Voice) =>
-    setAllowed((cur) => (cur.some((a) => a.id === v.id) ? cur.filter((a) => a.id !== v.id) : [...cur, { id: v.id, name: v.name }]));
-  const play = (url: string | null) => url && void new Audio(url).play();
 
   return (
     <form action={action} className="flex flex-col gap-6">
       <input type="hidden" name="key" value={type.key} />
       <input type="hidden" name="allowed_voices" value={JSON.stringify(allowed)} />
+      <input type="hidden" name="default_voice_id" value={defaultVoice.id} />
+      <input type="hidden" name="default_voice_name" value={defaultVoice.name} />
+      <input type="hidden" name="default_voice_owner" value={defaultVoice.owner ?? ""} />
       <section className="surface grid gap-5 p-[22px] sm:grid-cols-2 sm:p-8">
         <Field label="שם הסוג">
           <Input name="name" defaultValue={type.name} required className={input} />
@@ -113,52 +104,20 @@ export function TypeForm({
             ))}
           </select>
         </Field>
-        <Field label="קול ברירת מחדל" className="sm:col-span-2">
-          {voices.length ? (
-            <select name="default_voice_id" value={defaultVoice} onChange={(e) => setDefaultVoice(e.target.value)} className={selectCls}>
-              <option value="">לא נבחר</option>
-              {voices.map((v) => (
-                <option key={v.id} value={v.id}>
-                  {v.name}
-                  {v.description ? ` · ${v.description}` : ""}
-                </option>
-              ))}
-            </select>
-          ) : (
-            <Input name="default_voice_id" value={defaultVoice} onChange={(e) => setDefaultVoice(e.target.value)} dir="ltr" className={`${input} text-end`} placeholder="Voice ID" />
-          )}
-        </Field>
-        {voices.length > 0 && (
-          <div className="flex flex-col gap-3 sm:col-span-2">
-            <div className="flex flex-wrap items-end justify-between gap-3">
-              <div>
-                <p className="text-[15px] font-medium text-ink">קולות שהלקוח יכול לבחור</p>
-                <p className="text-[13px] text-ink-muted">נבחרו {allowed.length}</p>
-              </div>
-              <Input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="חיפוש קול" className="h-11 max-w-xs rounded-2xl" />
-            </div>
-            <ul className="grid max-h-80 gap-2 overflow-y-auto rounded-2xl bg-muted/50 p-2 sm:grid-cols-2">
-              {shown.map((v) => {
-                const on = allowed.some((a) => a.id === v.id);
-                return (
-                  <li key={v.id} className={cn("flex min-h-12 items-center gap-2 rounded-xl px-3", on ? "bg-tint" : "bg-card")}>
-                    <label className="flex flex-1 cursor-pointer items-center gap-2">
-                      <input type="checkbox" checked={on} onChange={() => toggle(v)} className="size-4 accent-[var(--violet)]" />
-                      <span className="min-w-0">
-                        <span className="block truncate text-[15px] text-ink">{v.name}</span>
-                        {v.description && <span className="block truncate text-[12px] text-ink-muted">{v.description}</span>}
-                      </span>
-                    </label>
-                    {v.previewUrl && (
-                      <button type="button" onClick={() => play(v.previewUrl)} aria-label={`השמעת ${v.name}`} className="grid size-9 place-items-center rounded-full text-violet hover:bg-white">
-                        <Play className="size-4" />
-                      </button>
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
+        {voices.length ? (
+          <div className="sm:col-span-2">
+            <VoicePicker
+              voices={voices}
+              allowed={allowed}
+              onAllowed={setAllowed}
+              defaultVoice={defaultVoice.id}
+              onDefault={setDefaultVoice}
+            />
           </div>
+        ) : (
+          <Field label="קול ברירת מחדל" className="sm:col-span-2">
+            <Input value={defaultVoice.id} onChange={(e) => setDefaultVoice({ id: e.target.value, name: e.target.value })} dir="ltr" className={`${input} text-end`} placeholder="Voice ID" />
+          </Field>
         )}
       </section>
 

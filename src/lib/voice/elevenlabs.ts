@@ -49,10 +49,21 @@ async function call<T>(path: string, init: RequestInit = {}): Promise<T> {
 export interface Voice {
   id: string;
   name: string;
-  /** e.g. "female · young · israeli" */
+  /** e.g. "young · israeli" */
   description: string;
   previewUrl: string | null;
+  gender: "female" | "male" | "";
+  hebrew: boolean;
+  /** "library" = a shared voice not yet in the account; it is added on first use. */
+  source: "account" | "library";
+  publicOwnerId?: string;
 }
+
+const isHe = (v?: string | null) => ["he", "hebrew", "iw"].includes((v ?? "").toLowerCase());
+const genderOf = (v?: string | null): Voice["gender"] => {
+  const g = (v ?? "").toLowerCase();
+  return g === "female" || g === "male" ? g : "";
+};
 
 /** Every voice in the account's library (premade and added). */
 export async function listVoices(): Promise<Voice[]> {
@@ -62,23 +73,77 @@ export async function listVoices(): Promise<Voice[]> {
     const q = new URLSearchParams({ page_size: "100", include_total_count: "false", sort: "name", sort_direction: "asc" });
     if (token) q.set("next_page_token", token);
     const r = await call<{
-      voices: { voice_id: string; name: string; labels?: Record<string, string>; preview_url?: string | null }[];
+      voices: {
+        voice_id: string;
+        name: string;
+        labels?: Record<string, string>;
+        preview_url?: string | null;
+        verified_languages?: { language?: string; preview_url?: string | null }[] | null;
+      }[];
       has_more: boolean;
       next_page_token: string | null;
     }>(`/v2/voices?${q}`);
     for (const v of r.voices) {
       const l = v.labels ?? {};
+      const he = (v.verified_languages ?? []).find((x) => isHe(x.language));
       out.push({
         id: v.voice_id,
         name: v.name,
-        description: [l.gender, l.age, l.accent, l.language].filter(Boolean).join(" · "),
-        previewUrl: v.preview_url ?? null,
+        description: [l.age, l.accent, l.descriptive].filter(Boolean).join(" · "),
+        previewUrl: he?.preview_url || v.preview_url || null,
+        gender: genderOf(l.gender),
+        hebrew: Boolean(he) || isHe(l.language),
+        source: "account",
       });
     }
     if (!r.has_more || !r.next_page_token) break;
     token = r.next_page_token;
   }
   return out;
+}
+
+/** Hebrew voices from the public voice library (up to ~300). */
+export async function listHebrewLibraryVoices(): Promise<Voice[]> {
+  const out: Voice[] = [];
+  for (let page = 0; page < 3; page++) {
+    const q = new URLSearchParams({ language: "he", page_size: "100", page: String(page) });
+    const r = await call<{
+      voices: {
+        voice_id: string;
+        public_owner_id: string;
+        name: string;
+        gender?: string;
+        age?: string;
+        accent?: string;
+        descriptive?: string;
+        preview_url?: string | null;
+      }[];
+      has_more: boolean;
+    }>(`/v1/shared-voices?${q}`);
+    for (const v of r.voices) {
+      out.push({
+        id: v.voice_id,
+        name: v.name,
+        description: [v.age, v.accent, v.descriptive].filter(Boolean).join(" · "),
+        previewUrl: v.preview_url ?? null,
+        gender: genderOf(v.gender),
+        hebrew: true,
+        source: "library",
+        publicOwnerId: v.public_owner_id,
+      });
+    }
+    if (!r.has_more) break;
+  }
+  return out;
+}
+
+/** Adds a shared library voice to the account; returns the account's voice id. */
+export async function addLibraryVoice(publicOwnerId: string, voiceId: string, name: string): Promise<string> {
+  const r = await call<{ voice_id: string }>(
+    `/v1/voices/add/${encodeURIComponent(publicOwnerId)}/${encodeURIComponent(voiceId)}`,
+    { method: "POST", body: JSON.stringify({ new_name: name }) },
+  );
+  return r.voice_id;
 }
 
 /** Conversation models the account can use with agents. */
@@ -212,4 +277,55 @@ export async function outboundCall(o: {
   );
   if (r.success === false) throw new VoiceProviderError(`השיחה לא יצאה: ${r.message ?? ""}`.trim());
   return { conversationId: r.conversation_id ?? null, callSid: r.callSid ?? null };
+}
+
+// ---------------------------------------------------------------- conversations (calls)
+
+export interface ProviderConversation {
+  conversation_id: string;
+  agent_id: string;
+  status?: string;
+  has_audio?: boolean;
+  transcript?: { role: string; message: string | null; time_in_call_secs?: number }[];
+  metadata?: {
+    start_time_unix_secs?: number;
+    call_duration_secs?: number;
+    phone_call?: { direction?: string; agent_number?: string; external_number?: string } | null;
+  };
+  analysis?: {
+    call_successful?: string;
+    transcript_summary?: string;
+    data_collection_results?: Record<string, { value?: unknown }>;
+  } | null;
+}
+
+export async function getConversation(id: string): Promise<ProviderConversation> {
+  return call<ProviderConversation>(`/v1/convai/conversations/${encodeURIComponent(id)}`);
+}
+
+/** Conversation ids of one agent, newest first, up to `limit`. */
+export async function listConversationIds(agentId: string, limit = 100): Promise<string[]> {
+  const ids: string[] = [];
+  let cursor: string | null = null;
+  do {
+    const q = new URLSearchParams({ agent_id: agentId, page_size: "100" });
+    if (cursor) q.set("cursor", cursor);
+    const r: { conversations: { conversation_id: string }[]; has_more?: boolean; next_cursor?: string | null } = await call(
+      `/v1/convai/conversations?${q}`,
+    );
+    ids.push(...r.conversations.map((c) => c.conversation_id));
+    cursor = r.has_more ? (r.next_cursor ?? null) : null;
+  } while (cursor && ids.length < limit);
+  return ids.slice(0, limit);
+}
+
+/** The call recording (audio/mpeg), streamed straight from the provider. */
+export async function conversationAudio(id: string): Promise<Response> {
+  const res = await fetch(`${ROOT}/v1/convai/conversations/${encodeURIComponent(id)}/audio`, {
+    headers: { "xi-api-key": key() },
+    signal: AbortSignal.timeout(60_000),
+    cache: "no-store",
+  });
+  if (!res.ok) throw new VoiceProviderError(explain(res.status, await res.text()), res.status);
+  return res;
 }
