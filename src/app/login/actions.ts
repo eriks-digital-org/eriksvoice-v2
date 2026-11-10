@@ -13,6 +13,17 @@ function safeNext(next: FormDataEntryValue | null): string {
   return n.startsWith("/") && !n.startsWith("//") ? n : "";
 }
 
+/** A message that says what to fix, so a failed sign-in can be solved without the logs. */
+function signInMessage(error: { status?: number; code?: string; message: string }): string {
+  if (error.code === "invalid_credentials") return "האימייל או הסיסמה לא נכונים.";
+  if (error.code === "email_not_confirmed") return "המייל עוד לא אושר. ב־Supabase אפשר לאשר את המשתמש (Auto Confirm).";
+  if (/invalid api key|no api key/i.test(error.message) || error.status === 401)
+    return "מפתח Supabase שהוגדר באתר לא נכון (NEXT_PUBLIC_SUPABASE_ANON_KEY).";
+  if (!error.status || error.status >= 500 || /fetch failed|network/i.test(error.message))
+    return "אין חיבור ל־Supabase. כדאי לבדוק את NEXT_PUBLIC_SUPABASE_URL.";
+  return `הכניסה נכשלה (${error.code ?? error.status}). נסו שוב.`;
+}
+
 export async function signIn(_: FormState, form: FormData): Promise<FormState> {
   if (!isSupabaseConfigured) return { error: "המערכת עוד לא מחוברת למסד הנתונים." };
   const email = String(form.get("email") ?? "").trim().toLowerCase();
@@ -22,7 +33,8 @@ export async function signIn(_: FormState, form: FormData): Promise<FormState> {
   const supabase = await createClient();
   const { error } = await supabase.auth.signInWithPassword({ email, password });
   if (error) {
-    return { error: error.code === "invalid_credentials" ? "האימייל או הסיסמה לא נכונים." : "הכניסה נכשלה. נסו שוב." };
+    console.error("sign-in failed", error.status, error.code, error.message);
+    return { error: signInMessage(error) };
   }
   const next = safeNext(form.get("next"));
   redirect(`/auth/continue${next ? `?next=${encodeURIComponent(next)}` : ""}`);
