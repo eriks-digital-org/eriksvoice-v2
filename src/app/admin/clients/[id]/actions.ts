@@ -6,9 +6,7 @@ import { requireAdmin } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { inviteMember } from "@/lib/data/members";
 import { activateAgent, pauseAgent, removeClientFromProvider, syncClient } from "@/lib/agents/sync";
-import { outboundNumberFor, releaseNumber, routeClientNumbers } from "@/lib/agents/phones";
-import { twilioCredentials } from "@/lib/telephony/twilio";
-import * as voice from "@/lib/voice/elevenlabs";
+import { callOut, releaseNumber, routeClientNumbers } from "@/lib/agents/phones";
 import { isRealtimeModel } from "@/lib/voice/models";
 
 export type ActionState = { error?: string; ok?: string };
@@ -157,27 +155,6 @@ export async function testCallAction(_: ActionState, form: FormData): Promise<Ac
   const agentId = String(form.get("agent_id"));
   const to = String(form.get("to") ?? "").replace(/[\s-]/g, "");
   if (!/^\+[1-9][0-9]{6,14}$/.test(to)) return { error: "מספר יעד בפורמט בינלאומי, למשל +972501234567" };
-  const db = createAdminClient();
-  const { data: agent } = await db.from("agents").select("client_id, status, provider_agent_id").eq("id", agentId).maybeSingle();
-  if (!agent?.provider_agent_id || agent.status !== "active") return { error: "קודם מפעילים את הסוכן" };
-  let number = await outboundNumberFor(agentId);
-  if (!number) return { error: "ללקוח אין מספר טלפון" };
-  if (!number.provider_phone_id) {
-    // Not imported yet (it has no active agent): import it now so the agent can call out from it.
-    try {
-      const { sid, token } = await twilioCredentials();
-      const phoneId = await voice.importTwilioNumber({ number: number.e164, label: number.e164, sid, token });
-      await db.from("phone_numbers").update({ provider_phone_id: phoneId }).eq("id", number.id);
-      await voice.routeNumber(phoneId, null);
-      number = { ...number, provider_phone_id: phoneId };
-    } catch (e) {
-      return { error: e instanceof Error ? e.message : "ייבוא המספר נכשל" };
-    }
-  }
-  try {
-    await voice.outboundCall({ agentId: agent.provider_agent_id, phoneId: number.provider_phone_id as string, to });
-    return { ok: `השיחה יוצאת מ־${number.e164}` };
-  } catch (e) {
-    return { error: e instanceof Error ? e.message : "השיחה לא יצאה" };
-  }
+  const r = await callOut(agentId, to);
+  return r.ok ? { ok: `השיחה יוצאת מ־${r.from}` } : { error: r.error };
 }

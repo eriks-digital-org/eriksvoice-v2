@@ -60,3 +60,32 @@ export async function outboundNumberFor(agentId: string) {
   const list = numbers ?? [];
   return list.find((n) => n.agent_id === agentId) ?? list.find((n) => n.is_primary) ?? null;
 }
+
+/**
+ * Places a call from an active agent to a phone, from the agent's outbound number
+ * (imported to the voice service on first use). Returns the provider's conversation id.
+ */
+export async function callOut(
+  agentId: string,
+  to: string,
+  variables?: Record<string, string>,
+): Promise<{ ok: true; from: string; conversationId: string | null } | { ok: false; error: string }> {
+  const db = createAdminClient();
+  const { data: agent } = await db.from("agents").select("status, provider_agent_id").eq("id", agentId).maybeSingle();
+  if (!agent?.provider_agent_id || agent.status !== "active") return { ok: false, error: "קודם מפעילים את הסוכן" };
+  let number = await outboundNumberFor(agentId);
+  if (!number) return { ok: false, error: "ללקוח אין מספר טלפון" };
+  try {
+    if (!number.provider_phone_id) {
+      const { sid, token } = await twilioCredentials();
+      const phoneId = await voice.importTwilioNumber({ number: number.e164, label: number.e164, sid, token });
+      await db.from("phone_numbers").update({ provider_phone_id: phoneId }).eq("id", number.id);
+      await voice.routeNumber(phoneId, null);
+      number = { ...number, provider_phone_id: phoneId };
+    }
+    const r = await voice.outboundCall({ agentId: agent.provider_agent_id, phoneId: number.provider_phone_id as string, to, variables });
+    return { ok: true, from: number.e164, conversationId: r.conversationId };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "השיחה לא יצאה" };
+  }
+}
