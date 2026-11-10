@@ -6,7 +6,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { AGENT_TYPE_KEYS, type AgentTypeKey } from "@/lib/agent-types";
 import { namedBusiness } from "@/lib/agents/prompt";
 import { syncType } from "@/lib/agents/sync";
-import { HEBREW_TTS_MODELS, type AllowedVoice } from "@/lib/voice/models";
+import { HEBREW_TTS_MODELS, isRealtimeModel, type AllowedVoice } from "@/lib/voice/models";
 
 export type SaveState = { error?: string; ok?: string };
 
@@ -28,6 +28,9 @@ export async function saveAgentType(_: SaveState, form: FormData): Promise<SaveS
 
   const tts = String(form.get("tts_model") ?? "eleven_v4_turbo");
   if (!HEBREW_TTS_MODELS.some((m) => m.id === tts)) return { error: "מודל הדיבור הזה לא מדבר עברית" };
+
+  const realtime = String(form.get("realtime_model") ?? "");
+  if (realtime && !isRealtimeModel(realtime)) return { error: "מצב דיבור לא מוכר" };
 
   let allowed: AllowedVoice[] = [];
   try {
@@ -61,6 +64,7 @@ export async function saveAgentType(_: SaveState, form: FormData): Promise<SaveS
       allowed_voices: allowed,
       allowed_voice_ids: allowed.map((v) => v.id),
       tts_model: tts,
+      realtime_model: realtime,
       voice_settings: voiceSettings,
       conversation_settings: turn,
       updated_by: access.userId,

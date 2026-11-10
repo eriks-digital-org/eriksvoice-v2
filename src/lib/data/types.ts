@@ -26,6 +26,7 @@ export interface AgentRow {
   voice_id: string | null;
   opening_line: string;
   llm_model_override?: string | null;
+  realtime_model_override?: string | null;
   custom_prompt?: string;
   sync_status?: "none" | "pending" | "ok" | "failed";
   sync_error?: string | null;
@@ -37,6 +38,7 @@ export interface AgentTypeRow {
   purpose: string;
   prompt: string;
   llm_model: string;
+  realtime_model?: string;
   default_voice_id: string;
   allowed_voice_ids: string[];
   voice_settings: Record<string, unknown>;
@@ -52,6 +54,8 @@ export interface PhoneRow {
   agent_id: string | null;
   is_primary: boolean;
   label: string;
+  route_error?: string | null;
+  provider_phone_id?: string | null;
 }
 
 export interface ConnectionRow {

@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Field } from "@/components/ds/kit";
 import { cn } from "@/lib/utils";
 import type { AgentTypeRow } from "@/lib/data/types";
-import { HEBREW_TTS_MODELS, type AllowedVoice } from "@/lib/voice/models";
+import { HEBREW_TTS_MODELS, REALTIME_MODELS, type AllowedVoice } from "@/lib/voice/models";
 import { saveAgentType, type SaveState } from "./actions";
 
 interface Voice {
@@ -76,7 +76,21 @@ export function TypeForm({
           </p>
         )}
         {catalogError && <p className="-mt-3 rounded-2xl bg-destructive-soft p-3 text-[15px] text-destructive sm:col-span-2">{catalogError}</p>}
-        <Field label="מודל שיחה (LLM)">
+        <Field
+          label="מצב דיבור"
+          hint="Realtime: מודל אחד ששומע, חושב ומדבר, עם תגובה מהירה יותר. במצב הזה ElevenLabs בוחרים את מודל השיחה ומודל הדיבור, והקול נשאר מה שבחרתם."
+          className="sm:col-span-2"
+        >
+          <select name="realtime_model" defaultValue={type.realtime_model ?? ""} className={selectCls}>
+            <option value="">רגיל (מודל שיחה + מודל דיבור לבחירה)</option>
+            {REALTIME_MODELS.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.label}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label="מודל שיחה (LLM)" hint="במצב Realtime לא בשימוש">
           {llms.length ? (
             <select name="llm_model" defaultValue={type.llm_model} className={selectCls} dir="ltr">
               <option value="">ברירת המחדל של ElevenLabs</option>
@@ -90,7 +104,7 @@ export function TypeForm({
             <Input name="llm_model" defaultValue={type.llm_model} dir="ltr" className={`${input} text-end`} placeholder="gemini-2.5-flash" />
           )}
         </Field>
-        <Field label="מודל דיבור" hint="רק מודלים שמדברים עברית">
+        <Field label="מודל דיבור" hint="רק מודלים שמדברים עברית. במצב Realtime לא בשימוש">
           <select name="tts_model" defaultValue={type.tts_model || "eleven_v4_turbo"} className={selectCls}>
             {HEBREW_TTS_MODELS.map((m) => (
               <option key={m.id} value={m.id}>

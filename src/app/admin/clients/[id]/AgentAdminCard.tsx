@@ -10,6 +10,7 @@ import { characterForType } from "@/components/agents/characters";
 import { agentTypeLabels } from "@/lib/agent-types";
 import type { AgentRow } from "@/lib/data/types";
 import { cn } from "@/lib/utils";
+import { REALTIME_MODELS } from "@/lib/voice/models";
 import { agentOverrideAction, agentPowerAction, type ActionState } from "./actions";
 
 const selectCls = "h-12 w-full rounded-2xl border border-input bg-card px-3 text-[16px]";
@@ -82,6 +83,17 @@ export function AgentAdminCard({
               {voices.map((v) => (
                 <option key={v.id} value={v.id}>
                   {v.name}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="מצב דיבור" hint="ריק = כמו בסוג">
+            <select name="realtime_model_override" defaultValue={agent.realtime_model_override ?? ""} className={selectCls}>
+              <option value="">כמו בסוג</option>
+              <option value="custom">רגיל (מודל שיחה + מודל דיבור)</option>
+              {REALTIME_MODELS.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.label}
                 </option>
               ))}
             </select>

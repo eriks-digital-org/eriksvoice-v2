@@ -3,6 +3,8 @@ import { createHash } from "node:crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
 import * as voice from "@/lib/voice/elevenlabs";
 import { buildPrompt, namedBusiness } from "./prompt";
+import { routeClientNumbers } from "./phones";
+import { isRealtimeModel } from "@/lib/voice/models";
 
 type Db = ReturnType<typeof createAdminClient>;
 
@@ -15,6 +17,7 @@ interface AgentFull {
   voice_id: string | null;
   opening_line: string;
   llm_model_override: string | null;
+  realtime_model_override: string | null;
   custom_prompt: string;
   provider_agent_id: string | null;
 }
@@ -100,6 +103,7 @@ async function pushAgent(db: Db, agent: AgentFull, knowledge: Awaited<ReturnType
     llm: agent.llm_model_override || type.llm_model,
     voiceId,
     ttsModel: type.tts_model || "eleven_v4_turbo",
+    realtimeModel: realtimeFor(agent.realtime_model_override, type.realtime_model),
     voiceSettings: (type.voice_settings ?? {}) as voice.AgentConfig["voiceSettings"],
     turn: (type.conversation_settings ?? {}) as voice.AgentConfig["turn"],
     knowledge: mine.map((i) => ({ id: i.provider_doc_id as string, name: i.title })),
@@ -115,7 +119,14 @@ async function pushAgent(db: Db, agent: AgentFull, knowledge: Awaited<ReturnType
 }
 
 const AGENT_COLUMNS =
-  "id, client_id, type_key, name, status, voice_id, opening_line, llm_model_override, custom_prompt, provider_agent_id";
+  "id, client_id, type_key, name, status, voice_id, opening_line, llm_model_override, realtime_model_override, custom_prompt, provider_agent_id";
+
+/** The agent's override wins; 'custom' forces the custom pipeline even when the type is Realtime. */
+export function realtimeFor(override: string | null, typeModel: string | null | undefined): string | null {
+  if (override === "custom") return null;
+  if (override && isRealtimeModel(override)) return override;
+  return typeModel && isRealtimeModel(typeModel) ? typeModel : null;
+}
 
 /** Brings every active agent of a client up to date with the voice provider. */
 export async function syncClient(clientId: string): Promise<SyncResult> {
@@ -143,6 +154,8 @@ export async function syncClient(clientId: string): Promise<SyncResult> {
     }
   }
   await flushTrash(db);
+  const routed = await routeClientNumbers(clientId);
+  firstError ??= routed.ok ? null : `ניתוב המספרים: ${routed.error}`;
   return firstError ? { ok: false, error: firstError } : { ok: true };
 }
 
@@ -194,19 +207,24 @@ export async function activateAgent(agentId: string): Promise<SyncResult> {
 /** Turns an agent off. It stays at the provider (no number reaches it), so turning it on again is quick. */
 export async function pauseAgent(agentId: string): Promise<SyncResult> {
   const db = createAdminClient();
-  const { error } = await db.from("agents").update({ status: "paused" }).eq("id", agentId);
-  return error ? { ok: false, error: "השמירה נכשלה" } : { ok: true };
+  const { data: agent, error } = await db.from("agents").update({ status: "paused" }).eq("id", agentId).select("client_id").single();
+  if (error || !agent) return { ok: false, error: "השמירה נכשלה" };
+  // Its numbers stop reaching it.
+  const routed = await routeClientNumbers(agent.client_id);
+  return routed.ok ? { ok: true } : { ok: false, error: `הסוכן כבוי, אבל ניתוב המספרים נכשל: ${routed.error}` };
 }
 
 /** Before a client is deleted: its agents and documents at the provider. */
 export async function removeClientFromProvider(clientId: string): Promise<SyncResult> {
   if (!voice.isVoiceConfigured()) return { ok: true };
   const db = createAdminClient();
-  const [{ data: agents }, { data: items }] = await Promise.all([
+  const [{ data: agents }, { data: items }, { data: numbers }] = await Promise.all([
     db.from("agents").select("provider_agent_id").eq("client_id", clientId).not("provider_agent_id", "is", null),
     db.from("knowledge_items").select("provider_doc_id").eq("client_id", clientId).not("provider_doc_id", "is", null),
+    db.from("phone_numbers").select("provider_phone_id").eq("client_id", clientId).not("provider_phone_id", "is", null),
   ]);
   try {
+    for (const n of numbers ?? []) await voice.deleteNumber(n.provider_phone_id as string);
     for (const a of agents ?? []) await voice.deleteAgent(a.provider_agent_id as string);
     for (const i of items ?? []) await voice.deleteKnowledge(i.provider_doc_id as string);
     return { ok: true };
