@@ -63,7 +63,7 @@ export function TypeForm({
         <h2 className="text-[20px] font-medium text-ink sm:col-span-2">מודל וקול</h2>
         {!connected && (
           <p className="-mt-3 rounded-2xl bg-warning-soft p-3 text-[15px] text-warning sm:col-span-2">
-            ElevenLabs עוד לא מחובר (ELEVENLABS_API_KEY ב־Vercel), ולכן אין רשימות לבחירה.
+            ElevenLabs עוד לא מחובר (הגדרות ← ספקים), ולכן אין רשימות לבחירה.
           </p>
         )}
         {catalogError && <p className="-mt-3 rounded-2xl bg-destructive-soft p-3 text-[15px] text-destructive sm:col-span-2">{catalogError}</p>}

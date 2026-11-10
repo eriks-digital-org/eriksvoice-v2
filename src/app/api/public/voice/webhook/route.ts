@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getSecret } from "@/lib/providers/secrets";
 import { ingestConversation, verifySignature } from "@/lib/calls/ingest";
 import type { ProviderConversation } from "@/lib/voice/elevenlabs";
 
@@ -7,7 +8,7 @@ import type { ProviderConversation } from "@/lib/voice/elevenlabs";
  * with the secret in ELEVENLABS_WEBHOOK_SECRET). Stores the call with its transcript and summary.
  */
 export async function POST(req: Request) {
-  const secret = process.env.ELEVENLABS_WEBHOOK_SECRET;
+  const secret = await getSecret("elevenlabs_webhook_secret");
   if (!secret) return NextResponse.json({ error: "webhook not configured" }, { status: 503 });
   const raw = await req.text();
   if (!verifySignature(req.headers.get("elevenlabs-signature"), raw, secret)) {

@@ -4,29 +4,33 @@ import { Pill } from "@/components/ds/StatusBadge";
 import { requireAdmin } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { SettingsForm } from "./SettingsForm";
+import Link from "next/link";
+import { PROVIDERS } from "@/lib/providers/registry";
+import { describeSecrets } from "@/lib/providers/secrets";
 
 export const metadata: Metadata = { title: "הגדרות" };
 
-/** Which provider keys are set in the server environment (values are never shown). */
-const PROVIDERS = [
-  { name: "ElevenLabs", env: "ELEVENLABS_API_KEY" },
-  { name: "Twilio", env: "TWILIO_ACCOUNT_SID" },
-  { name: "Utobo (מיילים)", env: "UTOBO_API_KEY" },
-  { name: "Activepieces", env: "ACTIVEPIECES_URL" },
-];
-
 export default async function SettingsPage() {
   await requireAdmin();
+  const info = await describeSecrets();
   const { data } = await createAdminClient().from("system_settings").select("*").eq("id", true).maybeSingle();
   return (
     <div className="flex flex-col gap-6 sm:gap-8">
       <PageHeader title="הגדרות" description="כללים שמשותפים לכל המערכת." />
-      <Panel title="ספקים" subtitle="המפתחות נשמרים בהגדרות השרת (Vercel), לא במסד הנתונים, ולא מוצגים כאן.">
+      <Panel
+        title="ספקים ומפתחות"
+        subtitle="ElevenLabs, Twilio, Utobo ו־Activepieces"
+        action={
+          <Link href="/admin/settings/providers" className="min-h-10 rounded-full bg-ink px-4 py-2 text-[14px] font-medium text-white">
+            ניהול
+          </Link>
+        }
+      >
         <ul className="grid gap-2 sm:grid-cols-2">
           {PROVIDERS.map((p) => (
-            <li key={p.env} className="flex min-h-12 items-center justify-between gap-3 rounded-2xl bg-muted/60 px-4">
+            <li key={p.key} className="flex min-h-12 items-center justify-between gap-3 rounded-2xl bg-muted/60 px-4">
               <span className="text-[16px] text-ink">{p.name}</span>
-              {process.env[p.env] ? <Pill tone="success">מוגדר</Pill> : <Pill tone="neutral">לא מוגדר</Pill>}
+              {p.fields.every((f) => f.optional || info[f.name]) ? <Pill tone="success">מוגדר</Pill> : <Pill tone="warning">חסר</Pill>}
             </li>
           ))}
         </ul>

@@ -1,4 +1,5 @@
 import "server-only";
+import { getSecret } from "@/lib/providers/secrets";
 
 /**
  * ElevenLabs Conversational AI, behind a small provider surface (see provider.ts).
@@ -15,11 +16,11 @@ export class VoiceProviderError extends Error {
   }
 }
 
-export const isVoiceConfigured = () => Boolean(process.env.ELEVENLABS_API_KEY);
+export const isVoiceConfigured = async () => Boolean(await getSecret("elevenlabs_api_key"));
 
-function key() {
-  const k = process.env.ELEVENLABS_API_KEY;
-  if (!k) throw new VoiceProviderError("שירות הקול עוד לא מחובר (ELEVENLABS_API_KEY).");
+async function key() {
+  const k = await getSecret("elevenlabs_api_key");
+  if (!k) throw new VoiceProviderError("שירות הקול עוד לא מחובר. מגדירים מפתח בהגדרות ← ספקים.");
   return k;
 }
 
@@ -36,7 +37,7 @@ function explain(status: number, body: string): string {
 async function call<T>(path: string, init: RequestInit = {}): Promise<T> {
   const res = await fetch(ROOT + path, {
     ...init,
-    headers: { "xi-api-key": key(), "Content-Type": "application/json", ...(init.headers ?? {}) },
+    headers: { "xi-api-key": await key(), "Content-Type": "application/json", ...(init.headers ?? {}) },
     signal: AbortSignal.timeout(60_000),
     cache: "no-store",
   }).catch(() => null);
@@ -322,7 +323,7 @@ export async function listConversationIds(agentId: string, limit = 100): Promise
 /** The call recording (audio/mpeg), streamed straight from the provider. */
 export async function conversationAudio(id: string): Promise<Response> {
   const res = await fetch(`${ROOT}/v1/convai/conversations/${encodeURIComponent(id)}/audio`, {
-    headers: { "xi-api-key": key() },
+    headers: { "xi-api-key": await key() },
     signal: AbortSignal.timeout(60_000),
     cache: "no-store",
   });

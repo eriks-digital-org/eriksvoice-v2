@@ -11,7 +11,7 @@ const message = (e: unknown) => (e instanceof Error ? e.message : "שגיאה ל
  * A number is imported into the provider the first time it has an active agent.
  */
 export async function routeClientNumbers(clientId: string): Promise<{ ok: boolean; error?: string }> {
-  if (!voice.isVoiceConfigured() || !isTwilioConfigured()) return { ok: true };
+  if (!(await voice.isVoiceConfigured()) || !(await isTwilioConfigured())) return { ok: true };
   const db = createAdminClient();
   const [{ data: numbers }, { data: agents }, { data: client }] = await Promise.all([
     db.from("phone_numbers").select("id, e164, agent_id, provider_phone_id").eq("client_id", clientId),
@@ -25,7 +25,7 @@ export async function routeClientNumbers(clientId: string): Promise<{ ok: boolea
     try {
       let phoneId = n.provider_phone_id as string | null;
       if (!phoneId && target) {
-        const { sid, token } = twilioCredentials();
+        const { sid, token } = await twilioCredentials();
         phoneId = await voice.importTwilioNumber({ number: n.e164, label: `${client?.name ?? ""} ${n.e164}`, sid, token });
         await db.from("phone_numbers").update({ provider_phone_id: phoneId }).eq("id", n.id);
       }
@@ -43,7 +43,7 @@ export async function routeClientNumbers(clientId: string): Promise<{ ok: boolea
 export async function releaseNumber(phoneRowId: string) {
   const db = createAdminClient();
   const { data } = await db.from("phone_numbers").select("provider_phone_id").eq("id", phoneRowId).maybeSingle();
-  if (data?.provider_phone_id && voice.isVoiceConfigured()) await voice.deleteNumber(data.provider_phone_id);
+  if (data?.provider_phone_id && (await voice.isVoiceConfigured())) await voice.deleteNumber(data.provider_phone_id);
 }
 
 /**

@@ -1,12 +1,13 @@
 import "server-only";
+import { getSecret } from "@/lib/providers/secrets";
 
 /** Twilio account (numbers are bought there manually, then assigned to one business here). */
-export const isTwilioConfigured = () => Boolean(process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN);
+export const isTwilioConfigured = async () => Boolean((await getSecret("twilio_account_sid")) && (await getSecret("twilio_auth_token")));
 
-export function twilioCredentials() {
-  const sid = process.env.TWILIO_ACCOUNT_SID;
-  const token = process.env.TWILIO_AUTH_TOKEN;
-  if (!sid || !token) throw new Error("Twilio עוד לא מחובר (TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN).");
+export async function twilioCredentials() {
+  const sid = await getSecret("twilio_account_sid");
+  const token = await getSecret("twilio_auth_token");
+  if (!sid || !token) throw new Error("Twilio עוד לא מחובר. מגדירים בהגדרות ← ספקים.");
   return { sid, token };
 }
 
@@ -18,7 +19,7 @@ export interface OwnedNumber {
 }
 
 export async function listOwnedNumbers(): Promise<OwnedNumber[]> {
-  const { sid, token } = twilioCredentials();
+  const { sid, token } = await twilioCredentials();
   const res = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}/IncomingPhoneNumbers.json?PageSize=200`, {
     headers: { Authorization: `Basic ${Buffer.from(`${sid}:${token}`).toString("base64")}` },
     signal: AbortSignal.timeout(15_000),

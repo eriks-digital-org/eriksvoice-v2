@@ -33,7 +33,7 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
   const phoneList = (phones ?? []) as PhoneRow[];
   let owned: OwnedNumber[] = [];
   let ownedError: string | undefined;
-  if (!isTwilioConfigured()) ownedError = "Twilio עוד לא מחובר, אפשר להקליד מספר ידנית.";
+  if (!(await isTwilioConfigured())) ownedError = "Twilio עוד לא מחובר, אפשר להקליד מספר ידנית.";
   else
     owned = await listOwnedNumbers()
       .then((list) => list.filter((n) => n.voice))

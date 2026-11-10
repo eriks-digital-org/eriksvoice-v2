@@ -18,7 +18,7 @@ const TTL = 5 * 60_000;
 
 /** Voices and models from the provider, for the admin's pickers. Empty when not connected. */
 export async function loadCatalog(): Promise<Catalog> {
-  if (!isVoiceConfigured()) return { connected: false, voices: [], llms: [] };
+  if (!(await isVoiceConfigured())) return { connected: false, voices: [], llms: [] };
   if (cached && Date.now() - cached.at < TTL) return cached.value;
   try {
     const [account, library, llms] = await Promise.all([

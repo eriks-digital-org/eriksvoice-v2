@@ -13,7 +13,7 @@ export const metadata: Metadata = { title: "שיחות" };
 async function pullLatest(form: FormData) {
   "use server";
   await requireAdmin();
-  if (!isVoiceConfigured()) return;
+  if (!(await isVoiceConfigured())) return;
   const db = createAdminClient();
   const only = String(form.get("client") ?? "");
   let q = db.from("agents").select("client_id").not("provider_agent_id", "is", null);
