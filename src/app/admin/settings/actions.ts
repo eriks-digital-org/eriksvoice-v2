@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { syncAll } from "@/lib/agents/sync";
 
 export type SaveState = { error?: string; ok?: string };
 
@@ -22,6 +23,8 @@ export async function saveSettings(_: SaveState, form: FormData): Promise<SaveSt
     })
     .eq("id", true);
   if (error) return { error: "השמירה נכשלה" };
+  // The safety rules are layer 1 of every agent's prompt.
+  const { failed } = await syncAll();
   revalidatePath("/admin/settings");
-  return { ok: "נשמר" };
+  return { ok: failed ? `נשמר, אבל העדכון נכשל אצל ${failed} לקוחות` : "נשמר" };
 }
