@@ -7,7 +7,9 @@ import { requireAdmin } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { AgentRow, ClientRow, PhoneRow } from "@/lib/data/types";
 import { DeleteClientForm, InviteForm } from "./ClientForms";
-import { flowUrlAction, resyncAction, setStatusAction } from "./actions";
+import { connectionStatusAction, flowUrlAction, resyncAction, setStatusAction } from "./actions";
+import { CONNECTIONS } from "@/lib/connections";
+import { ConnBadge, type ConnStatus } from "@/components/ds/StatusBadge";
 import { AgentAdminCard } from "./AgentAdminCard";
 import { loadCatalog } from "@/lib/voice/catalog";
 import { isTwilioConfigured, listOwnedNumbers, type OwnedNumber } from "@/lib/telephony/twilio";
@@ -29,6 +31,8 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
     db.from("connections").select("id", { count: "exact", head: true }).eq("client_id", id).eq("status", "connected"),
     db.from("connections").select("flow_url").eq("client_id", id).eq("kind", "activepieces").maybeSingle(),
   ]);
+  const { data: conns } = await db.from("connections").select("kind, status, last_error, requested_at").eq("client_id", id);
+  const connOf = (kind: string) => (conns ?? []).find((c) => c.kind === kind) as { status: ConnStatus; last_error: string | null; requested_at: string | null } | undefined;
   const site = process.env.NEXT_PUBLIC_SITE_URL ?? "https://eriksvoice.co.il";
   const agentList = (agents ?? []) as AgentRow[];
   const catalog = await loadCatalog();
@@ -161,6 +165,37 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
         <code dir="ltr" className="mt-1.5 block break-all rounded-2xl bg-muted/60 p-3 text-[14px] text-ink">
           {site}/api/public/hooks/{(client as ClientRow & { inbound_token?: string }).inbound_token}
         </code>
+      </Panel>
+
+      <Panel title="חיבורי הלקוח" subtitle="אחרי שמחברים את השירות ב־Activepieces ובודקים, מסמנים כאן ״מחובר״. הלקוח רואה את הסטטוס.">
+        <ul className="divide-y divide-border">
+          {CONNECTIONS.filter((c) => !c.later).map((c) => {
+            const cur = connOf(c.kind);
+            const st = cur?.status ?? "off";
+            return (
+              <li key={c.kind} className="flex flex-wrap items-center gap-3 py-3">
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[16px] font-medium text-ink">{c.label}</span>
+                  {cur?.last_error && <span className="block text-[13px] text-destructive">{cur.last_error}</span>}
+                </span>
+                <ConnBadge status={st} />
+                <form action={connectionStatusAction} className="flex flex-wrap items-center gap-2">
+                  <input type="hidden" name="client_id" value={client.id} />
+                  <input type="hidden" name="kind" value={c.kind} />
+                  <select name="status" defaultValue={st} className="h-10 rounded-xl border border-input bg-card px-2 text-[14px]">
+                    <option value="off">לא מחובר</option>
+                    <option value="requested">נשלחה בקשה</option>
+                    <option value="configured">בבדיקה</option>
+                    <option value="connected">מחובר</option>
+                    <option value="error">תקלה</option>
+                  </select>
+                  <input name="note" placeholder="הערה לתקלה" defaultValue={cur?.last_error ?? ""} className="h-10 w-36 rounded-xl border border-input bg-card px-2 text-[14px]" />
+                  <button className="min-h-10 rounded-full bg-ink px-4 text-[14px] font-medium text-white">עדכון</button>
+                </form>
+              </li>
+            );
+          })}
+        </ul>
       </Panel>
 
       <Panel title="אזור מסוכן">
