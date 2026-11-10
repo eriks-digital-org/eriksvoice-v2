@@ -33,6 +33,7 @@ export const adminMainNav: NavItem[] = [
 export const adminMoreNav: NavItem[] = [
   { to: "/automations", label: "תבניות אוטומציה", icon: LayoutTemplate },
   { to: "/usage", label: "שימוש", icon: Gauge },
+  { to: "/notifications", label: "התראות", icon: BellRing },
   { to: "/health", label: "תקינות מערכת", icon: FlaskConical },
   { to: "/settings", label: "הגדרות", icon: Settings },
 ];
