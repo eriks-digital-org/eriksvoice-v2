@@ -18,8 +18,11 @@ export interface OwnedNumber {
   voice: boolean;
 }
 
+/** The account's numbers. Kept for a minute per server instance, so the client screen opens fast. */
+let ownedCache: { at: number; sid: string; list: OwnedNumber[] } | null = null;
 export async function listOwnedNumbers(): Promise<OwnedNumber[]> {
   const { sid, token } = await twilioCredentials();
+  if (ownedCache && ownedCache.sid === sid && Date.now() - ownedCache.at < 60_000) return ownedCache.list;
   const res = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}/IncomingPhoneNumbers.json?PageSize=200`, {
     headers: { Authorization: `Basic ${Buffer.from(`${sid}:${token}`).toString("base64")}` },
     signal: AbortSignal.timeout(15_000),
@@ -31,12 +34,14 @@ export async function listOwnedNumbers(): Promise<OwnedNumber[]> {
   const j = (await res.json()) as {
     incoming_phone_numbers?: { sid: string; phone_number: string; friendly_name: string; capabilities?: { voice?: boolean } }[];
   };
-  return (j.incoming_phone_numbers ?? []).map((n) => ({
+  const list = (j.incoming_phone_numbers ?? []).map((n) => ({
     sid: n.sid,
     number: n.phone_number,
     friendly: n.friendly_name,
     voice: Boolean(n.capabilities?.voice),
   }));
+  ownedCache = { at: Date.now(), sid, list };
+  return list;
 }
 
 /** Sends an SMS from one of the account's numbers. */
