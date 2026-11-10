@@ -117,11 +117,9 @@ function body(c: AgentConfig) {
   // In Realtime mode the provider manages the LLM and the speech model, so we don't send them.
   // NOTE: the documented param is `realtime_model`; its place under agent.prompt follows the
   // docs' managed-settings table and is verified against the live API.
+  // In custom mode the field is left out, so a field name we got wrong can never break normal agents.
   if (c.realtimeModel) prompt.realtime_model = c.realtimeModel;
-  else {
-    prompt.realtime_model = null;
-    if (c.llm) prompt.llm = c.llm;
-  }
+  else if (c.llm) prompt.llm = c.llm;
   const tts: Record<string, unknown> = { ...(c.realtimeModel ? {} : { model_id: c.ttsModel }), ...c.voiceSettings };
   if (c.voiceId) tts.voice_id = c.voiceId;
   return {
