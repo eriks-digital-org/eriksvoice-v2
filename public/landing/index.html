@@ -75,7 +75,6 @@
         </div>
         <div class="assist__foot">
           <button class="assist__reset" type="button">איפוס</button>
-          <a href="https://eriks.co.il/accessibility/">הצהרת נגישות</a>
         </div>
       </div>
     </div>
@@ -84,7 +83,7 @@
       <img class="consent__art" src="/brand/cookie-robot.webp" alt="" width="360" height="360" />
       <div class="consent__body">
         <p class="consent__title" id="consent-title">רגע לפני שממשיכים.</p>
-        <p class="consent__text" id="consent-text">אנחנו משתמשים בעוגיות כדי שהאתר יעבוד, ובאישור שלכם גם כדי למדוד ולשפר אותו. <a href="/privacy/#cookies">מה זה אומר</a></p>
+        <p class="consent__text" id="consent-text">אנחנו משתמשים בעוגיות כדי שהאתר יעבוד, ובאישור שלכם גם כדי למדוד ולשפר אותו.</p>
         <div class="consent__prefs" hidden>
           <label><input type="checkbox" checked disabled /><span><b>הכרחיות</b>שומרות את הבחירות שלכם. תמיד פעילות.</span></label>
           <label><input type="checkbox" name="stats" /><span><b>סטטיסטיקה</b>עוזרות לנו להבין אילו עמודים עובדים.</span></label>
@@ -102,66 +101,14 @@
 
         <header class="nav">
       <!-- Official Hebrew lockup, cut from the client's vector file -->
-      <a class="nav__brand" href="https://eriks.co.il/" aria-label="אריקס דיגיטל, דף הבית">
+      <span class="nav__brand">
         <img class="nav__logo" src="/brand/eriks-logo-he.svg" alt="אריקס דיגיטל" width="126" height="36" />
-      </a>
-
-      <div class="nav__group">
-        <button class="nav__menu" type="button" aria-expanded="false" aria-controls="site-menu">
-          <span class="nav__menu-dot" aria-hidden="true">
-            <svg viewBox="0 0 12 12"><path d="M6 2v8M2 6h8" /></svg>
-          </span>
-          <span>תפריט</span>
-        </button>
-        <nav class="nav__links" aria-label="ניווט ראשי">
-          <a href="/login">כניסה</a>
-          <a href="https://eriks.co.il/#services">שירותים</a>
-          <a href="https://eriks.co.il/#results">תוצאות</a>
-        </nav>
-      </div>
+      </span>
 
       <a class="nav__cta" href="#contact" aria-label="לקביעת שיחת היכרות">
         <span class="nav__cta-icon" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="M13 8H3M7 4 3 8l4 4" /></svg></span>
         <span class="nav__cta-label">לקביעת שיחת היכרות</span>
       </a>
-
-      <!-- The menu: a panel over half the screen — the home page's sections (the
-           systems open under "המערכות שלנו"), the blog, the call to action, and
-           the logo bubble in its corner -->
-      <div class="menu" id="site-menu" data-open="false" inert>
-        <div class="menu__backdrop"></div>
-        <div class="menu__panel" role="dialog" aria-label="תפריט" data-lenis-prevent>
-          <p class="menu__label">תפריט</p>
-          <ol class="menu__chapters">
-            <li><a href="https://eriks.co.il/#problem"><b>01</b>הבעיה</a></li>
-            <li><a href="https://eriks.co.il/#services"><b>02</b>שירותים</a></li>
-            <li><a href="https://eriks.co.il/#creative"><b>03</b>קריאייטיב</a></li>
-            <li><a href="https://eriks.co.il/#results"><b>04</b>תוצאות</a></li>
-            <li><a href="https://eriks.co.il/#cases"><b>05</b>הוכחות</a></li>
-            <li><a href="https://eriks.co.il/#about"><b>06</b>עלינו</a></li>
-            <li class="menu__group">
-              <div class="menu__row">
-                <a href="https://eriks.co.il/#tools"><b>07</b>המערכות שלנו</a>
-                <button class="menu__toggle" type="button" aria-expanded="false" aria-controls="menu-tools" aria-label="המערכות שלנו"><svg viewBox="0 0 16 16"><path d="M4 6l4 4 4-4" /></svg></button>
-              </div>
-              <div class="menu__sub" id="menu-tools">
-                <ul>
-                  <li><a href="https://eriks.co.il/crm/">אריקס CRM</a></li>
-                  <li><a href="/">EriksVoice</a></li>
-                </ul>
-              </div>
-            </li>
-            <li><a href="https://eriks.co.il/#reviews"><b>08</b>ביקורות</a></li>
-            <li><a href="https://eriks.co.il/blog/"><b>09</b>בלוג</a></li>
-            <li><a href="#contact"><b>10</b>צור קשר</a></li>
-            <li><a href="/login"><b>11</b>כניסה למערכת</a></li>
-          </ol>
-          <div class="menu__foot">
-            <a class="cta-btn" href="#contact"><span class="cta-btn__dot" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="M13 8H3M7 4 3 8l4 4" /></svg></span>לקביעת שיחת היכרות</a>
-          </div>
-          <button class="menu__bubble" type="button" aria-label="הבועה של אריקס, לחצו לקפיצה"><img src="/brand/eriks-mark.svg" alt="" width="104" height="96" /></button>
-        </div>
-      </div>
     </header>
 
 
@@ -181,7 +128,6 @@
       <section class="vhero" aria-labelledby="svc-title">
         <div class="vhero__bg" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
         <div class="vhero__copy">
-          <p class="svc-crumb"><a href="https://eriks.co.il/">אריקס דיגיטל</a> / <a href="https://eriks.co.il/#services">שירותים</a> / EriksVoice</p>
           <img class="vhero__logo" src="/brand/eriksvoice-logo.webp" alt="EriksVoice" width="1100" height="205" />
           <h1 class="vhero__title" id="svc-title">כל שיחה מקבלת מענה.<span>גם כשהעסק לא פנוי.</span></h1>
           <p class="vhero__lede">צוות של סוכנים קוליים שעונים לשיחות, מתקשרים לכל ליד חדש, קובעים פגישות ומעדכנים את ה־CRM. בעברית, בכל שעה, בשיחה שמרגישה אנושית.</p>
@@ -508,7 +454,6 @@
               <h2 id="pair-title">כל שיחה נוחתת בכרטיס של הליד.</h2>
               <p>אריקס CRM מרכזת את כל הלידים מכל הקמפיינים. השיחות של הסוכנים נשמרות בה, וכל הצוות רואה מה נאמר ומה הצעד הבא.</p>
             </div>
-            <a class="cta-btn" href="https://eriks.co.il/crm/"><span class="cta-btn__dot" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="M13 8H3M7 4 3 8l4 4" /></svg></span>להכיר את אריקס CRM</a>
           </div>
         </section>
 
@@ -625,15 +570,6 @@
               קמפיינים, קריאייטיב ומערכות
               <span>שמביאים לעסק שלכם לקוחות.</span>
             </p>
-            <div class="foot__social-row">
-              <span class="foot__hand">בואו נדבר!</span>
-              <ul class="foot__social">
-                <li><a href="#" aria-label="וואטסאפ"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M4 20.5 5.2 16A8.3 8.3 0 1 1 8.4 19Z" /><path d="M9 8.5c.2 2.9 2.6 5.7 6 6.5l1-1.6-1.8-1-1 .8c-1-.4-1.9-1.3-2.4-2.4l.8-1-1-1.8L9 8.5Z" /></svg></a></li>
-                <li><a href="https://www.instagram.com/eriksdigital" aria-label="אינסטגרם"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="4" width="16" height="16" rx="5" /><circle cx="12" cy="12" r="3.6" /><circle cx="16.8" cy="7.2" r=".7" fill="currentColor" stroke="none" /></svg></a></li>
-                <li><a href="https://www.facebook.com/erikscoil" aria-label="פייסבוק"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M14 8h2.5V4.5H14A4 4 0 0 0 10 8.5V11H7.5v3.5H10V21h3.5v-6.5H16l.5-3.5h-3V9a1 1 0 0 1 1-1Z" /></svg></a></li>
-                <li><a href="#" aria-label="לינקדאין"><svg viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="9" width="3.2" height="11" rx=".6" /><circle cx="5.6" cy="5.6" r="1.8" /><path d="M10.5 9h3v1.6c.6-1 1.8-1.9 3.6-1.9 3 0 3.9 2 3.9 4.9V20h-3.2v-5.6c0-1.4-.3-2.6-1.8-2.6s-2.1 1.1-2.1 2.6V20h-3.4Z" /></svg></a></li>
-              </ul>
-            </div>
           </div>
         </div>
 
@@ -648,39 +584,7 @@
             </span>
           </div>
 
-          <nav class="foot__nav" aria-label="קישורים בתחתית">
-            <div>
-              <p class="foot__label">ניווט</p>
-              <ul>
-                <li><a href="https://eriks.co.il/#problem">הבעיה</a></li>
-                <li><a href="https://eriks.co.il/#services">שירותים</a></li>
-                <li><a href="https://eriks.co.il/#creative">קריאייטיב</a></li>
-                <li><a href="https://eriks.co.il/#results">תוצאות</a></li>
-                <li><a href="https://eriks.co.il/#cases">הוכחות</a></li>
-                <li><a href="https://eriks.co.il/#about">עלינו</a></li>
-              </ul>
-            </div>
-            <div>
-              <p class="foot__label">המערכות שלנו</p>
-              <ul>
-                <li><a href="https://eriks.co.il/crm/">אריקס CRM</a></li>
-                <li><a href="/">EriksVoice</a></li>
-                <li><a href="https://eriks.co.il/blog/">בלוג</a></li>
-              </ul>
-            </div>
-            <div>
-              <p class="foot__label">החברה</p>
-              <ul>
-                <li><a href="#contact">צור קשר</a></li>
-                <li><a href="https://eriks.co.il/terms/">תנאי שימוש</a></li>
-                <li><a href="https://eriks.co.il/privacy/">מדיניות פרטיות</a></li>
-                <li><a href="https://eriks.co.il/accessibility/">הצהרת נגישות</a></li>
-                <li><button class="foot__consent" type="button" data-open-consent>הגדרות עוגיות</button></li>
-              </ul>
-            </div>
-          </nav>
-
-          <p class="foot__copy">© 2026 אריקס דיגיטל. כל הזכויות שמורות.</p>
+          <p class="foot__copy">© 2026 אריקס דיגיטל. כל הזכויות שמורות. <button class="foot__consent" type="button" data-open-consent>הגדרות עוגיות</button></p>
         </div>
       </div>
 
