@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
 import * as voice from "@/lib/voice/elevenlabs";
 import { buildPrompt, namedBusiness } from "./prompt";
+import type { AllowedVoice } from "@/lib/voice/models";
 import { routeClientNumbers } from "./phones";
 import { isRealtimeModel } from "@/lib/voice/models";
 
@@ -71,7 +72,14 @@ async function pushAgent(db: Db, agent: AgentFull, knowledge: Awaited<ReturnType
   ]);
   if (!type || !client) throw new Error("חסרים נתוני סוג או לקוח");
 
+  const voiceId = agent.voice_id || type.default_voice_id;
+  const allowed = (type.allowed_voices ?? []) as AllowedVoice[];
+  // The voice's gender, so the agent speaks of itself accordingly (from the allowed list,
+  // otherwise from the account's voices).
+  let gender = allowed.find((v) => v.id === voiceId)?.gender ?? "";
+  if (!gender && voiceId) gender = (await voice.listVoices().catch(() => [])).find((v) => v.id === voiceId)?.gender ?? "";
   const prompt = buildPrompt({
+    identity: { name: agent.name, gender },
     safetyRules: settings?.safety_rules ?? "",
     typePrompt: type.prompt,
     business: {
@@ -93,7 +101,6 @@ async function pushAgent(db: Db, agent: AgentFull, knowledge: Awaited<ReturnType
   const other = namedBusiness(prompt, (others ?? []).map((o) => o.name));
   if (other) throw new Error(`הפרומפט מזכיר עסק אחר ("${other}"), ולכן לא נשלח.`);
 
-  const voiceId = agent.voice_id || type.default_voice_id;
   if (!voiceId) throw new Error(`לא נבחר קול ל"${type.name}". בוחרים קול ברירת מחדל בניהול ← סוכני AI.`);
 
   const mine = knowledge.items.filter(
