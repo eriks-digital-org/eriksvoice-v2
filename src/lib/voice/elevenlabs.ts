@@ -189,6 +189,10 @@ export interface AgentConfig {
   turn: { turn_timeout?: number; turn_eagerness?: string; silence_end_call_timeout?: number };
   knowledge: KnowledgeRef[];
   tags: string[];
+  /** Other agents of the same business this agent may hand the call over to. */
+  transfers: { agentId: string; condition: string; message: string }[];
+  /** Leave the transfer tool out of the request entirely (fallback if the provider rejects it). */
+  omitTransferTool?: boolean;
 }
 
 function body(c: AgentConfig) {
@@ -201,6 +205,27 @@ function body(c: AgentConfig) {
   // NOTE: the documented param is `realtime_model`; its place under agent.prompt follows the
   // docs' managed-settings table and is verified against the live API.
   // In custom mode the field is left out, so a field name we got wrong can never break normal agents.
+  // Hand-over to the business's other agents (the provider's transfer_to_agent system tool).
+  // null removes it when no other agent is available.
+  if (!c.omitTransferTool) prompt.built_in_tools = {
+    transfer_to_agent: c.transfers.length
+      ? {
+          type: "system",
+          name: "transfer_to_agent",
+          description: "העברת השיחה לסוכן אחר של העסק כשהפונה צריך משהו שהוא מטפל בו",
+          params: {
+            system_tool_type: "transfer_to_agent",
+            transfers: c.transfers.map((t) => ({
+              agent_id: t.agentId,
+              condition: t.condition,
+              delay_ms: 600,
+              transfer_message: t.message,
+              enable_transferred_agent_first_message: false,
+            })),
+          },
+        }
+      : null,
+  };
   if (c.realtimeModel) prompt.realtime_model = c.realtimeModel;
   else if (c.llm) prompt.llm = c.llm;
   const tts: Record<string, unknown> = { ...(c.realtimeModel ? {} : { model_id: c.ttsModel }), ...c.voiceSettings };

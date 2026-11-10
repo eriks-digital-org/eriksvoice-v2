@@ -62,7 +62,18 @@ async function flushTrash(db: Db) {
   }
 }
 
-async function pushAgent(db: Db, agent: AgentFull, knowledge: Awaited<ReturnType<typeof syncKnowledge>>) {
+/** An active agent of the same business, as a hand-over target. */
+interface Peer {
+  id: string;
+  providerId: string | null;
+  name: string;
+  typeName: string;
+  purpose: string;
+  realtime: boolean;
+  active: boolean;
+}
+
+async function pushAgent(db: Db, agent: AgentFull, knowledge: Awaited<ReturnType<typeof syncKnowledge>>, peers: Peer[]) {
   const [{ data: type }, { data: settings }, { data: client }, { data: others }, { data: automations }] = await Promise.all([
     db.from("agent_types").select("*").eq("key", agent.type_key).single(),
     db.from("system_settings").select("safety_rules").eq("id", true).single(),
@@ -106,6 +117,15 @@ async function pushAgent(db: Db, agent: AgentFull, knowledge: Awaited<ReturnType
   const mine = knowledge.items.filter(
     (i) => i.provider_doc_id && (i.all_agents || knowledge.links.some((l) => l.item_id === i.id && l.agent_id === agent.id)),
   );
+  const realtimeModel = realtimeFor(agent.realtime_model_override, type.realtime_model);
+  // The provider transfers only between agents of the same mode (Realtime ↔ Realtime).
+  const transfers = peers
+    .filter((p) => p.id !== agent.id && p.active && p.providerId && p.realtime === Boolean(realtimeModel))
+    .map((p) => ({
+      agentId: p.providerId as string,
+      condition: `כשהפונה צריך ${p.typeName}${p.purpose ? ` (${p.purpose})` : ""} ולא אתה מטפל בזה. שם הסוכן: ${p.name}.`,
+      message: `רגע, אני מעביר אותך ל${p.name}.`,
+    }));
   const config: voice.AgentConfig = {
     name: `${client.name} · ${agent.name}`,
     prompt,
@@ -114,18 +134,33 @@ async function pushAgent(db: Db, agent: AgentFull, knowledge: Awaited<ReturnType
     llm: agent.llm_model_override || type.llm_model,
     voiceId,
     ttsModel: type.tts_model || "eleven_v4_turbo",
-    realtimeModel: realtimeFor(agent.realtime_model_override, type.realtime_model),
+    realtimeModel,
     voiceSettings: (type.voice_settings ?? {}) as voice.AgentConfig["voiceSettings"],
     turn: (type.conversation_settings ?? {}) as voice.AgentConfig["turn"],
     knowledge: mine.map((i) => ({ id: i.provider_doc_id as string, name: i.title })),
     tags: [`client:${client.slug}`, `type:${agent.type_key}`],
+    transfers,
   };
 
+  // If the provider rejects the hand-over settings, the agent is still saved without them.
+  const send = async <T,>(fn: (c: voice.AgentConfig) => Promise<T>): Promise<T> => {
+    try {
+      return await fn(config);
+    } catch (e) {
+      if (!(e instanceof voice.VoiceProviderError && (e.status === 400 || e.status === 422))) throw e;
+      console.error("sync: retrying without transfer tool", e.message);
+      return fn({ ...config, transfers: [], omitTransferTool: true });
+    }
+  };
   if (agent.provider_agent_id) {
-    await voice.updateAgent(agent.provider_agent_id, config);
+    const pid = agent.provider_agent_id;
+    await send((c) => voice.updateAgent(pid, c));
+    return false;
   } else {
-    const id = await voice.createAgent(config);
+    const id = await send((c) => voice.createAgent(c));
     await db.from("agents").update({ provider_agent_id: id }).eq("id", agent.id);
+    agent.provider_agent_id = id;
+    return true;
   }
 }
 
@@ -154,15 +189,44 @@ export async function syncClient(clientId: string): Promise<SyncResult> {
     await db.from("agents").update({ sync_status: "failed", sync_error: message(e) }).in("id", agents.map((a) => a.id));
     return { ok: false, error: message(e) };
   }
+  const { data: types } = await db.from("agent_types").select("key, name, purpose, realtime_model");
+  const peers: Peer[] = agents.map((a) => {
+    const t = (types ?? []).find((x) => x.key === a.type_key);
+    return {
+      id: a.id,
+      providerId: a.provider_agent_id,
+      name: a.name,
+      typeName: t?.name ?? "",
+      purpose: t?.purpose ?? "",
+      realtime: Boolean(realtimeFor(a.realtime_model_override, t?.realtime_model)),
+      active: a.status === "active",
+    };
+  });
   let firstError: string | null = null;
-  for (const agent of agents) {
-    try {
-      await pushAgent(db, agent, knowledge);
-      await db.from("agents").update({ sync_status: "ok", sync_error: null, synced_at: new Date().toISOString() }).eq("id", agent.id);
-    } catch (e) {
-      firstError ??= message(e);
-      await db.from("agents").update({ sync_status: "failed", sync_error: message(e) }).eq("id", agent.id);
+  const failed = new Set<string>();
+  const pushAll = async () => {
+    let created = false;
+    for (const agent of agents) {
+      try {
+        if (await pushAgent(db, agent, knowledge, peers)) {
+          created = true;
+          const p = peers.find((x) => x.id === agent.id);
+          if (p) p.providerId = agent.provider_agent_id;
+        }
+        failed.delete(agent.id);
+        await db.from("agents").update({ sync_status: "ok", sync_error: null, synced_at: new Date().toISOString() }).eq("id", agent.id);
+      } catch (e) {
+        failed.add(agent.id);
+        firstError ??= message(e);
+        await db.from("agents").update({ sync_status: "failed", sync_error: message(e) }).eq("id", agent.id);
+      }
     }
+    return created;
+  };
+  // An agent created in this run can only be a transfer target for the others on a second pass.
+  if ((await pushAll()) && agents.length > 1) {
+    firstError = null;
+    await pushAll();
   }
   await flushTrash(db);
   const routed = await routeClientNumbers(clientId);
@@ -220,9 +284,9 @@ export async function pauseAgent(agentId: string): Promise<SyncResult> {
   const db = createAdminClient();
   const { data: agent, error } = await db.from("agents").update({ status: "paused" }).eq("id", agentId).select("client_id").single();
   if (error || !agent) return { ok: false, error: "השמירה נכשלה" };
-  // Its numbers stop reaching it.
-  const routed = await routeClientNumbers(agent.client_id);
-  return routed.ok ? { ok: true } : { ok: false, error: `הסוכן כבוי, אבל ניתוב המספרים נכשל: ${routed.error}` };
+  // Its numbers stop reaching it, and the other agents stop transferring to it.
+  const res = await syncClient(agent.client_id);
+  return res.ok ? { ok: true } : { ok: false, error: `הסוכן כבוי, אבל העדכון נכשל: ${res.error}` };
 }
 
 /** Before a client is deleted: its agents and documents at the provider. */
