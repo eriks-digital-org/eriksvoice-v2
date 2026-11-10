@@ -28,7 +28,12 @@ async function key() {
 function explain(status: number, body: string): string {
   const lower = body.toLowerCase();
   if (lower.includes("expressive_tts_not_allowed")) return "מודל הדיבור שנבחר לא כלול בחבילה. v4 Turbo תומך בעברית.";
-  if (status === 401) return "מפתח ElevenLabs לא תקין.";
+  if (lower.includes("missing_permissions")) {
+    const perm = /permission[^"]*?\b([a-z_]+_(?:read|write))\b/.exec(lower)?.[1];
+    return `למפתח ElevenLabs חסרה הרשאה${perm ? ` (${perm})` : ""}. ב־ElevenLabs ← API Keys עורכים את המפתח ומאפשרים Agents, Voices ו־Models.`;
+  }
+  if (lower.includes("api key id")) return "הוזן מזהה המפתח ולא המפתח עצמו (שמתחיל ב־sk_).";
+  if (status === 401) return `מפתח ElevenLabs נדחה: ${body.slice(0, 160)}`;
   if (status === 524 || status === 504) return "שירות הקול לא הספיק להשיב. נסו שוב.";
   if (status === 422) return `שירות הקול דחה את הבקשה: ${body.slice(0, 200)}`;
   return `שירות הקול החזיר שגיאה (${status}): ${body.slice(0, 200)}`;

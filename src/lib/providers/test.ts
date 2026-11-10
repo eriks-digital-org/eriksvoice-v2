@@ -16,10 +16,14 @@ export async function testProvider(key: ProviderDef["key"], adminEmail?: string)
       if (!k) return { ok: false, message: "אין מפתח" };
       const r = await get("https://api.elevenlabs.io/v2/voices?page_size=1", { "xi-api-key": k });
       if (!r) return { ok: false, message: "ElevenLabs לא הגיב" };
-      if (r.ok) return { ok: true, message: "המפתח עובד" };
+      if (r.ok) {
+        const agents = await get("https://api.elevenlabs.io/v1/convai/agents?page_size=1", { "xi-api-key": k });
+        if (agents && !agents.ok) return { ok: false, message: `קולות עובדים, אבל אין הרשאה לסוכנים (Agents): ${(await agents.text()).slice(0, 160)}` };
+        return { ok: true, message: "המפתח עובד (קולות וסוכנים)" };
+      }
       const body = await r.text();
       if (body.includes("API key ID")) return { ok: false, message: "הוזן מזהה המפתח ולא המפתח עצמו (שמתחיל ב־sk_)" };
-      if (body.includes("missing_permissions")) return { ok: false, message: "למפתח חסרות הרשאות (Voices / Agents)" };
+      if (body.includes("missing_permissions")) return { ok: false, message: `למפתח חסרות הרשאות: ${body.slice(0, 200)}` };
       return { ok: false, message: `המפתח נדחה (${r.status})` };
     }
     case "twilio": {
