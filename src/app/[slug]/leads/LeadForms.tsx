@@ -25,6 +25,9 @@ export function AddLeadForm({ slug }: { slug: string }) {
       <Field label="טלפון">
         <Input name="phone" required dir="ltr" placeholder="050-1234567" className={`${inputCls} text-end`} />
       </Field>
+      <Field label="מייל" hint="לא חובה">
+        <Input name="email" type="email" dir="ltr" className={`${inputCls} text-end`} />
+      </Field>
       <Field label="תיקיות" hint="מופרדות בפסיק">
         <Input name="tags" className={inputCls} />
       </Field>

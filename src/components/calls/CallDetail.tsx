@@ -1,11 +1,11 @@
 import { Pill } from "@/components/ds/StatusBadge";
 import { Panel } from "@/components/ds/primitives";
 import { StatTile } from "@/components/ds/kit";
-import { directionLabel, duration, outcomeLabel, when, type CallFull } from "./format";
+import { directionLabel, duration, outcomeLabel, statusLabel, when, type CallFull } from "./format";
 
 /** One call: recording, summary, collected data and the full transcript. */
 export function CallDetail({ call }: { call: CallFull }) {
-  const o = outcomeLabel[call.outcome];
+  const o = statusLabel[call.status] ?? outcomeLabel[call.outcome];
   const collected = Object.entries(call.collected ?? {}).filter(([, v]) => v !== null && v !== "");
   return (
     <div className="flex flex-col gap-6">
@@ -20,6 +20,13 @@ export function CallDetail({ call }: { call: CallFull }) {
         <Panel title="הקלטה">
           <audio controls preload="none" src={`/api/calls/${call.id}/audio`} className="w-full" />
         </Panel>
+      )}
+
+      {call.end_reason && (
+        <p className="rounded-2xl bg-tint p-4 text-[16px] text-ink">
+          <span className="font-medium">איך השיחה הסתיימה: </span>
+          {call.end_reason}
+        </p>
       )}
 
       <Panel title="סיכום">

@@ -8,6 +8,7 @@ import { inviteMember } from "@/lib/data/members";
 import { activateAgent, pauseAgent, removeClientFromProvider, syncClient } from "@/lib/agents/sync";
 import { callOut, releaseNumber, routeClientNumbers } from "@/lib/agents/phones";
 import { isRealtimeModel } from "@/lib/voice/models";
+import { refreshLiveCalls } from "@/lib/calls/live";
 
 export type ActionState = { error?: string; ok?: string };
 
@@ -156,5 +157,31 @@ export async function testCallAction(_: ActionState, form: FormData): Promise<Ac
   const to = String(form.get("to") ?? "").replace(/[\s-]/g, "");
   if (!/^\+[1-9][0-9]{6,14}$/.test(to)) return { error: "מספר יעד בפורמט בינלאומי, למשל +972501234567" };
   const r = await callOut(agentId, to);
-  return r.ok ? { ok: `השיחה יוצאת מ־${r.from}` } : { error: r.error };
+  if (!r.ok) return { error: r.error };
+  // Wait a few seconds and ask Twilio, so a call that never rang is reported here, with the reason.
+  if (r.callId) {
+    for (let i = 0; i < 4; i++) {
+      await new Promise((ok) => setTimeout(ok, 2500));
+      await refreshLiveCalls(undefined).catch(() => 0);
+      const { data: c } = await createAdminClient().from("calls").select("status, end_reason").eq("id", r.callId).single();
+      if (c && c.status !== "calling") {
+        if (c.status === "failed" || c.status === "no_answer") return { error: `השיחה לא יצאה: ${c.end_reason || "ללא פירוט"}` };
+        return { ok: `השיחה יוצאת מ־${r.from} (${c.status === "ringing" ? "מצלצלת" : "בשיחה"}). אפשר לעקוב ולנתק במסך השיחות.` };
+      }
+    }
+  }
+  return { ok: `השיחה נשלחה מ־${r.from}. אם לא צלצל תוך דקה, במסך השיחות תופיע הסיבה.` };
+}
+
+/** The client's Activepieces flow (its webhook address), used by the "Activepieces" action. */
+export async function flowUrlAction(form: FormData) {
+  await requireAdmin();
+  const clientId = String(form.get("client_id"));
+  const url = String(form.get("flow_url") ?? "").trim();
+  if (url && !/^https:\/\/[^\s]+$/i.test(url)) return;
+  const db = createAdminClient();
+  await db
+    .from("connections")
+    .upsert({ client_id: clientId, kind: "activepieces", flow_url: url || null, status: url ? "configured" : "off" }, { onConflict: "client_id,kind" });
+  revalidatePath(`/admin/clients/${clientId}`);
 }

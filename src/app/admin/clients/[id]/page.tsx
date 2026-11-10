@@ -7,7 +7,7 @@ import { requireAdmin } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { AgentRow, ClientRow, PhoneRow } from "@/lib/data/types";
 import { DeleteClientForm, InviteForm } from "./ClientForms";
-import { resyncAction, setStatusAction } from "./actions";
+import { flowUrlAction, resyncAction, setStatusAction } from "./actions";
 import { AgentAdminCard } from "./AgentAdminCard";
 import { loadCatalog } from "@/lib/voice/catalog";
 import { isTwilioConfigured, listOwnedNumbers, type OwnedNumber } from "@/lib/telephony/twilio";
@@ -21,13 +21,15 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
   const { data: client } = await db.from("clients").select("*").eq("id", id).maybeSingle<ClientRow>();
   if (!client) notFound();
 
-  const [{ data: agents }, { data: phones }, { data: members }, { count: knowledgeCount }, { count: connected }] = await Promise.all([
+  const [{ data: agents }, { data: phones }, { data: members }, { count: knowledgeCount }, { count: connected }, { data: flow }] = await Promise.all([
     db.from("agents").select("id, client_id, type_key, name, status, voice_id, opening_line, sync_status, sync_error, llm_model_override, realtime_model_override, custom_prompt, provider_agent_id").eq("client_id", id).order("created_at"),
     db.from("phone_numbers").select("id, client_id, e164, agent_id, is_primary, label, route_error, provider_phone_id").order("created_at").eq("client_id", id),
     db.from("client_members").select("user_id, created_at, profiles:user_id(email, full_name)").eq("client_id", id),
     db.from("knowledge_items").select("id", { count: "exact", head: true }).eq("client_id", id),
     db.from("connections").select("id", { count: "exact", head: true }).eq("client_id", id).eq("status", "connected"),
+    db.from("connections").select("flow_url").eq("client_id", id).eq("kind", "activepieces").maybeSingle(),
   ]);
+  const site = process.env.NEXT_PUBLIC_SITE_URL ?? "https://eriksvoice.co.il";
   const agentList = (agents ?? []) as AgentRow[];
   const catalog = await loadCatalog();
   const phoneList = (phones ?? []) as PhoneRow[];
@@ -138,6 +140,28 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
           <InviteForm clientId={client.id} />
         </Panel>
       </div>
+
+      <Panel title="אוטומציות וחיבורים" subtitle="הזרימה של הלקוח ב־Activepieces מקבלת את הפעולה 'Activepieces' מהאוטומציות שלו.">
+        <form action={flowUrlAction} className="flex flex-wrap items-end gap-3">
+          <input type="hidden" name="client_id" value={client.id} />
+          <label className="flex min-w-0 flex-1 flex-col gap-1.5">
+            <span className="text-[15px] font-medium text-ink">כתובת ה־Webhook של הזרימה ב־Activepieces</span>
+            <input
+              name="flow_url"
+              type="url"
+              dir="ltr"
+              defaultValue={(flow as { flow_url?: string | null } | null)?.flow_url ?? ""}
+              placeholder="https://voice.eriks.co.il/api/v1/webhooks/…"
+              className="h-12 w-full rounded-2xl border border-input bg-card px-3 text-[16px]"
+            />
+          </label>
+          <button className="min-h-12 rounded-full bg-ink px-5 text-[15px] font-medium text-white">שמירה</button>
+        </form>
+        <p className="mt-5 text-[15px] font-medium text-ink">כתובת לקבלת נתונים אצל הלקוח (טפסים, Activepieces, CRM)</p>
+        <code dir="ltr" className="mt-1.5 block break-all rounded-2xl bg-muted/60 p-3 text-[14px] text-ink">
+          {site}/api/public/hooks/{(client as ClientRow & { inbound_token?: string }).inbound_token}
+        </code>
+      </Panel>
 
       <Panel title="אזור מסוכן">
         <DeleteClientForm clientId={client.id} name={client.name} />

@@ -69,12 +69,22 @@ export async function callOut(
   agentId: string,
   to: string,
   variables?: Record<string, string>,
-): Promise<{ ok: true; from: string; conversationId: string | null } | { ok: false; error: string }> {
+): Promise<{ ok: true; from: string; conversationId: string | null; callId: string | null } | { ok: false; error: string }> {
   const db = createAdminClient();
-  const { data: agent } = await db.from("agents").select("status, provider_agent_id").eq("id", agentId).maybeSingle();
+  const { data: agent } = await db.from("agents").select("client_id, status, provider_agent_id").eq("id", agentId).maybeSingle();
   if (!agent?.provider_agent_id || agent.status !== "active") return { ok: false, error: "קודם מפעילים את הסוכן" };
   let number = await outboundNumberFor(agentId);
   if (!number) return { ok: false, error: "ללקוח אין מספר טלפון" };
+  // Every attempt is recorded, so the calls screen shows failed and live calls too.
+  const record = async (row: Record<string, unknown>) => {
+    const { data, error } = await db
+      .from("calls")
+      .insert({ client_id: agent.client_id, agent_id: agentId, direction: "outbound", external_number: to, agent_number: number?.e164 ?? "", outcome: "unknown", has_audio: false, ...row })
+      .select("id")
+      .single();
+    if (error) console.error("calls: record outbound failed", error.message);
+    return (data?.id as string | undefined) ?? null;
+  };
   try {
     if (!number.provider_phone_id) {
       const { sid, token } = await twilioCredentials();
@@ -84,8 +94,11 @@ export async function callOut(
       number = { ...number, provider_phone_id: phoneId };
     }
     const r = await voice.outboundCall({ agentId: agent.provider_agent_id, phoneId: number.provider_phone_id as string, to, variables });
-    return { ok: true, from: number.e164, conversationId: r.conversationId };
+    const callId = await record({ provider_conversation_id: r.conversationId, call_sid: r.callSid, status: "calling", summary: "" });
+    return { ok: true, from: number.e164, conversationId: r.conversationId, callId };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : "השיחה לא יצאה" };
+    const error = e instanceof Error ? e.message : "השיחה לא יצאה";
+    await record({ status: "failed", end_reason: error, ended_at: new Date().toISOString() });
+    return { ok: false, error };
   }
 }

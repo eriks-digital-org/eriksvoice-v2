@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { runDialer } from "@/lib/dialer/run";
+import { runAutomations } from "@/lib/automations/engine";
 import { getSecret } from "@/lib/providers/secrets";
 
 export const maxDuration = 60;
@@ -13,5 +14,6 @@ export async function GET(req: Request) {
   if (!secret || req.headers.get("authorization") !== `Bearer ${secret}`) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
-  return NextResponse.json(await runDialer());
+  const [dialer, automations] = await Promise.all([runDialer(), runAutomations()]);
+  return NextResponse.json({ dialer, automations });
 }

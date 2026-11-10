@@ -5,6 +5,7 @@ import { requireMember } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { toE164 } from "@/lib/phone";
 import { parseCsv } from "@/lib/csv";
+import { emitNewLeads } from "@/lib/automations/leads";
 
 export type LeadState = { error?: string; ok?: string };
 
@@ -21,16 +22,18 @@ export async function addLeadAction(_: LeadState, form: FormData): Promise<LeadS
   const phone = toE164(String(form.get("phone") ?? ""));
   if (!phone) return { error: "מספר טלפון לא תקין" };
   const db = await createClient();
-  const { error } = await db.from("leads").insert({
+  const { data: added, error } = await db.from("leads").insert({
     client_id: client.id,
     name: String(form.get("name") ?? "").trim().slice(0, 120),
     phone,
     notes: String(form.get("notes") ?? "").trim().slice(0, 2000),
     tags: tagsOf(form.get("tags")),
     source: "manual",
+    email: String(form.get("email") ?? "").trim().slice(0, 200),
     status: form.get("queue") === "1" ? "queued" : "new",
-  });
+  }).select("id").single();
   if (error) return { error: error.code === "23505" ? "המספר כבר ברשימה" : "השמירה נכשלה" };
+  await emitNewLeads([added.id]);
   revalidatePath(`/${slug}/leads`);
   return { ok: "נוסף" };
 }
@@ -77,6 +80,7 @@ export async function importCsvAction(_: LeadState, form: FormData): Promise<Lea
   const db = await createClient();
   const { data, error } = await db.from("leads").upsert(leads, { onConflict: "client_id,phone", ignoreDuplicates: true }).select("id");
   if (error) return { error: "הייבוא נכשל" };
+  await emitNewLeads((data ?? []).map((d) => d.id));
   revalidatePath(`/${slug}/leads`);
   const added = data?.length ?? 0;
   return { ok: `נוספו ${added} לידים${leads.length - added ? `, ${leads.length - added} כבר היו ברשימה` : ""}${bad ? `, ${bad} שורות בלי מספר תקין` : ""}` };
