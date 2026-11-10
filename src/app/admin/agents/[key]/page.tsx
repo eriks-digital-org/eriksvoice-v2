@@ -4,18 +4,23 @@ import { requireAdmin } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { AGENT_TYPE_KEYS, type AgentTypeKey } from "@/lib/agent-types";
 import type { AgentTypeRow } from "@/lib/data/types";
+import type { AllowedVoice } from "@/lib/voice/models";
+import { loadCatalog } from "@/lib/voice/catalog";
 import { TypeForm } from "./TypeForm";
 
 export default async function AgentTypePage({ params }: { params: Promise<{ key: string }> }) {
   await requireAdmin();
   const { key } = await params;
   if (!AGENT_TYPE_KEYS.includes(key as AgentTypeKey)) notFound();
-  const { data } = await createAdminClient().from("agent_types").select("*").eq("key", key).maybeSingle<AgentTypeRow>();
+  const [{ data }, catalog] = await Promise.all([
+    createAdminClient().from("agent_types").select("*").eq("key", key).maybeSingle<AgentTypeRow & { allowed_voices: AllowedVoice[]; tts_model: string }>(),
+    loadCatalog(),
+  ]);
   if (!data) notFound();
   return (
     <div className="flex flex-col gap-6 sm:gap-8">
       <PageHeader title={data.name} description={data.purpose} />
-      <TypeForm type={data} />
+      <TypeForm type={data} voices={catalog.voices} llms={catalog.llms} connected={catalog.connected} catalogError={catalog.error} />
     </div>
   );
 }

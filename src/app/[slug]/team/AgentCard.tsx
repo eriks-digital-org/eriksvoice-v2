@@ -10,7 +10,17 @@ import { agentTypeLabels } from "@/lib/agent-types";
 import type { AgentRow } from "@/lib/data/types";
 import { saveAgent, type SaveState } from "./actions";
 
-export function AgentCard({ agent, slug, phone }: { agent: AgentRow; slug: string; phone?: string }) {
+export function AgentCard({
+  agent,
+  slug,
+  phone,
+  voices,
+}: {
+  agent: AgentRow;
+  slug: string;
+  phone?: string;
+  voices: { id: string; name: string }[];
+}) {
   const [state, action, pending] = useActionState<SaveState, FormData>(saveAgent, {});
   const c = characterForType(agent.type_key, agent.id);
   return (
@@ -39,6 +49,18 @@ export function AgentCard({ agent, slug, phone }: { agent: AgentRow; slug: strin
       <Field label="שם הסוכן">
         <Input name="name" defaultValue={agent.name} required className="h-12 rounded-2xl text-[16px]" />
       </Field>
+      {voices.length > 0 && (
+        <Field label="קול">
+          <select name="voice_id" defaultValue={agent.voice_id ?? ""} className="h-12 w-full rounded-2xl border border-input bg-card px-3 text-[16px]">
+            {!agent.voice_id && <option value="">קול ברירת המחדל</option>}
+            {voices.map((v) => (
+              <option key={v.id} value={v.id}>
+                {v.name}
+              </option>
+            ))}
+          </select>
+        </Field>
+      )}
       <Field label="משפט הפתיח" hint="מה הסוכן אומר כשהוא עונה">
         <Textarea name="opening_line" defaultValue={agent.opening_line} rows={2} className="rounded-2xl text-[16px]" />
       </Field>

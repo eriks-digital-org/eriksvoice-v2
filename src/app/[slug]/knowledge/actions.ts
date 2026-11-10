@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { requireMember } from "@/lib/auth";
+import { syncClient } from "@/lib/agents/sync";
 
 export type SaveState = { error?: string; ok?: string };
 
@@ -20,6 +21,7 @@ export async function saveItem(_: SaveState, form: FormData): Promise<SaveState>
     ? await supabase.from("knowledge_items").update({ title, body }).eq("id", id).eq("client_id", client.id)
     : await supabase.from("knowledge_items").insert({ client_id: client.id, title, body });
   if (error) return { error: "השמירה נכשלה" };
+  await syncClient(client.id);
   revalidatePath(`/${slug}/knowledge`);
   return { ok: id ? "נשמר" : "נוסף" };
 }
@@ -29,5 +31,6 @@ export async function deleteItem(form: FormData) {
   const { client } = await requireMember(slug);
   const supabase = await createClient();
   await supabase.from("knowledge_items").delete().eq("id", String(form.get("id"))).eq("client_id", client.id);
+  await syncClient(client.id);
   revalidatePath(`/${slug}/knowledge`);
 }

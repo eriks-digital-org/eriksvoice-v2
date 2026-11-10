@@ -2,14 +2,14 @@ import { notFound } from "next/navigation";
 import { CheckCircle2, Circle } from "lucide-react";
 import { PageHeader, Panel } from "@/components/ds/primitives";
 import { StatTile } from "@/components/ds/kit";
-import { AgentStatusBadge, ClientStatusBadge } from "@/components/ds/StatusBadge";
-import { characterForType } from "@/components/agents/characters";
+import { ClientStatusBadge } from "@/components/ds/StatusBadge";
 import { requireAdmin } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { agentTypeLabels } from "@/lib/agent-types";
 import type { AgentRow, ClientRow, PhoneRow } from "@/lib/data/types";
 import { DeleteClientForm, InviteForm } from "./ClientForms";
-import { setStatusAction } from "./actions";
+import { resyncAction, setStatusAction } from "./actions";
+import { AgentAdminCard } from "./AgentAdminCard";
+import { loadCatalog } from "@/lib/voice/catalog";
 
 export default async function ClientPage({ params }: { params: Promise<{ id: string }> }) {
   await requireAdmin();
@@ -20,13 +20,14 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
   if (!client) notFound();
 
   const [{ data: agents }, { data: phones }, { data: members }, { count: knowledgeCount }, { count: connected }] = await Promise.all([
-    db.from("agents").select("id, client_id, type_key, name, status, voice_id, opening_line, sync_status").eq("client_id", id).order("created_at"),
+    db.from("agents").select("id, client_id, type_key, name, status, voice_id, opening_line, sync_status, sync_error, llm_model_override, custom_prompt, provider_agent_id").eq("client_id", id).order("created_at"),
     db.from("phone_numbers").select("id, client_id, e164, agent_id, is_primary, label").eq("client_id", id),
     db.from("client_members").select("user_id, created_at, profiles:user_id(email, full_name)").eq("client_id", id),
     db.from("knowledge_items").select("id", { count: "exact", head: true }).eq("client_id", id),
     db.from("connections").select("id", { count: "exact", head: true }).eq("client_id", id).eq("status", "connected"),
   ]);
   const agentList = (agents ?? []) as AgentRow[];
+  const catalog = await loadCatalog();
   const phoneList = (phones ?? []) as PhoneRow[];
   type Member = { user_id: string; profiles: { email: string; full_name: string } | null };
   const memberList = (members ?? []) as unknown as Member[];
@@ -82,24 +83,20 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
         </ul>
       </Panel>
 
-      <Panel title="סוכנים" subtitle="הסוכנים נשמרים רק אצלנו עד שמפעילים אותם. ההפעלה יוצרת את הסוכן בשירות הקול, ותיפתח אחרי חיבור ElevenLabs.">
-        <ul className="grid gap-3 sm:grid-cols-2">
-          {agentList.map((a) => {
-            const c = characterForType(a.type_key, a.id);
-            return (
-              <li key={a.id} className="flex items-center gap-4 rounded-[22px] bg-muted/60 p-3">
-                <span className="grid size-14 shrink-0 place-items-center overflow-hidden rounded-full" style={{ background: c.wash }}>
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={c.smile} alt="" className="size-14 object-contain" />
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[17px] font-medium text-ink">{a.name}</span>
-                  <span className="block text-[14px] text-ink-muted">{agentTypeLabels[a.type_key]}</span>
-                </span>
-                <AgentStatusBadge status={a.status} />
-              </li>
-            );
-          })}
+      <Panel
+        title="סוכנים"
+        subtitle="סוכן כבוי נשמר רק אצלנו. ההפעלה יוצרת אותו בשירות הקול, וכל שינוי עולה אליו מיד."
+        action={
+          <form action={resyncAction}>
+            <input type="hidden" name="client_id" value={client.id} />
+            <button className="min-h-10 rounded-full bg-card px-4 text-[14px] font-medium text-ink shadow-soft">סנכרון מחדש</button>
+          </form>
+        }
+      >
+        <ul className="grid gap-3 lg:grid-cols-2">
+          {agentList.map((a) => (
+            <AgentAdminCard key={a.id} agent={a} voices={catalog.voices} llms={catalog.llms} />
+          ))}
         </ul>
       </Panel>
 
