@@ -2,6 +2,7 @@ import "server-only";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
 import * as voice from "@/lib/voice/elevenlabs";
+import { settleFromCall } from "@/lib/dialer/run";
 
 /**
  * Verifies the provider's webhook signature: header "t=<unix>,v0=<hex>", where
@@ -56,6 +57,10 @@ export async function ingestConversation(c: voice.ProviderConversation): Promise
     { onConflict: "provider_conversation_id" },
   );
   if (error) throw new Error(error.message);
+  if (direction === "outbound") {
+    const userSpoke = (c.transcript ?? []).some((t) => t.role === "user" && t.message?.trim());
+    await settleFromCall(c.conversation_id, Math.round(c.metadata?.call_duration_secs ?? 0), userSpoke, c.analysis?.transcript_summary ?? "");
+  }
   await checkQuota(agent.client_id);
   return true;
 }
