@@ -7,6 +7,15 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { listCalls, pageOf } from "@/lib/calls/queries";
 import { backfillClient } from "@/lib/calls/ingest";
 import { isVoiceConfigured } from "@/lib/voice/elevenlabs";
+import { hangupCall, refreshLiveCalls } from "@/lib/calls/live";
+import { AutoRefresh } from "@/components/calls/AutoRefresh";
+
+async function hangup(form: FormData) {
+  "use server";
+  await requireAdmin();
+  await hangupCall(String(form.get("call_id")));
+  revalidatePath("/admin/calls");
+}
 
 export const metadata: Metadata = { title: "שיחות" };
 
@@ -31,6 +40,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ c
   const page = pageOf(sp.page);
   const clientId = sp.client && /^[0-9a-f-]{36}$/i.test(sp.client) ? sp.client : undefined;
   const db = createAdminClient();
+  const live = await refreshLiveCalls(clientId).catch(() => 0);
   const [{ data: clients }, calls] = await Promise.all([
     db.from("clients").select("id, name").order("name"),
     listCalls(db, { clientId, page, withClient: !clientId }),
@@ -41,7 +51,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ c
     <div className="flex flex-col gap-6 sm:gap-8">
       <PageHeader
         title="שיחות"
-        description="כל השיחות מכל הלקוחות. שיחה נכנסת לכאן כשהיא מסתיימת, עם הקלטה, תמלול וסיכום."
+        description="כל השיחות מכל הלקוחות, כולל שיחות יוצאות שעוד פתוחות ושיחות שנכשלו. שיחה שהסתיימה מגיעה עם הקלטה, תמלול וסיכום."
         actions={
           <form action={pullLatest}>
             <input type="hidden" name="client" value={clientId ?? ""} />
@@ -64,8 +74,10 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ c
         </select>
         <button className="min-h-12 rounded-full bg-ink px-5 text-[15px] font-medium text-white">סינון</button>
       </form>
+      {live > 0 && <AutoRefresh />}
       <Panel bodyClassName="p-0 sm:p-0">
         <CallList
+          hangup={hangup}
           calls={calls}
           page={page}
           hrefFor={(id) => `/admin/calls/${id}`}

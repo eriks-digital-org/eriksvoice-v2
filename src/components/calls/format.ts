@@ -6,6 +6,8 @@ export interface CallListItem {
   started_at: string;
   duration_secs: number;
   summary: string;
+  status: string;
+  end_reason: string;
   agent_name: string | null;
   client_name?: string | null;
 }
@@ -28,5 +30,17 @@ export const outcomeLabel = {
   failure: { label: "לא הצליחה", tone: "danger" },
   unknown: { label: "לא ידוע", tone: "neutral" },
 } as const;
+
+/** Calls that haven't ended (outbound calls being placed or in progress). */
+export const isLive = (status: string) => status === "calling" || status === "ringing" || status === "in_progress";
+
+/** The state shown for calls that didn't end as a normal conversation. */
+export const statusLabel: Record<string, { label: string; tone: "info" | "danger" | "warning" }> = {
+  calling: { label: "מחייגת", tone: "info" },
+  ringing: { label: "מצלצלת", tone: "info" },
+  in_progress: { label: "בשיחה עכשיו", tone: "info" },
+  failed: { label: "נכשלה", tone: "danger" },
+  no_answer: { label: "לא נענתה", tone: "warning" },
+};
 
 export const CALLS_PAGE = 30;

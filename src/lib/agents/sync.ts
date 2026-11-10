@@ -62,11 +62,12 @@ async function flushTrash(db: Db) {
 }
 
 async function pushAgent(db: Db, agent: AgentFull, knowledge: Awaited<ReturnType<typeof syncKnowledge>>) {
-  const [{ data: type }, { data: settings }, { data: client }, { data: others }] = await Promise.all([
+  const [{ data: type }, { data: settings }, { data: client }, { data: others }, { data: automations }] = await Promise.all([
     db.from("agent_types").select("*").eq("key", agent.type_key).single(),
     db.from("system_settings").select("safety_rules").eq("id", true).single(),
     db.from("clients").select("slug, name, industry, address, contact_phone, business_hours").eq("id", agent.client_id).single(),
     db.from("clients").select("name").neq("id", agent.client_id),
+    db.from("automations").select("spec").eq("client_id", agent.client_id).eq("enabled", true),
   ]);
   if (!type || !client) throw new Error("חסרים נתוני סוג או לקוח");
 
@@ -81,7 +82,10 @@ async function pushAgent(db: Db, agent: AgentFull, knowledge: Awaited<ReturnType
       phone: client.contact_phone,
     },
     customPrompt: agent.custom_prompt,
-    automationInstructions: [],
+    automationInstructions: (automations ?? [])
+      .map((a) => (a.spec as { instruction?: string; agent_id?: string | null }) ?? {})
+      .filter((sp) => sp.instruction?.trim() && (!sp.agent_id || sp.agent_id === agent.id))
+      .map((sp) => sp.instruction as string),
   });
   if (!type.prompt.trim() && !agent.custom_prompt.trim()) {
     throw new Error(`הפרומפט של "${type.name}" ריק. כותבים אותו בניהול ← סוכני AI.`);

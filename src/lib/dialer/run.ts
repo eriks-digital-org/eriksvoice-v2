@@ -2,6 +2,9 @@ import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { callOut } from "@/lib/agents/phones";
 import { minutesThisMonth } from "@/lib/calls/ingest";
+import { inWindow } from "@/lib/time";
+import { emit } from "@/lib/automations/engine";
+export { inWindow, israelNow } from "@/lib/time";
 
 type Db = ReturnType<typeof createAdminClient>;
 
@@ -21,25 +24,6 @@ export interface DialerSettings {
 /** A call still "out" after this long without a webhook counts as unanswered. */
 const STALE_MINUTES = 20;
 
-/** Day of week (0 = Sunday) and minute of day, in Israel time. */
-export function israelNow(d = new Date()) {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: "Asia/Jerusalem",
-    weekday: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-    hourCycle: "h23",
-  }).formatToParts(d);
-  const get = (t: string) => parts.find((p) => p.type === t)?.value ?? "";
-  const day = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(get("weekday"));
-  return { day, minute: Number(get("hour")) * 60 + Number(get("minute")) };
-}
-
-export function inWindow(s: Pick<DialerSettings, "days" | "start_minute" | "end_minute">, d = new Date()) {
-  const { day, minute } = israelNow(d);
-  return s.days.includes(day) && minute >= s.start_minute && minute < s.end_minute;
-}
-
 /** After a call attempt: done when they talked, else retry later or give up. */
 export async function settleLead(
   db: Db,
@@ -53,7 +37,22 @@ export async function settleLead(
     : lead.attempts >= s.max_attempts
       ? { status: "failed", next_attempt_at: null }
       : { status: "queued", next_attempt_at: new Date(Date.now() + s.retry_minutes * 60_000).toISOString() };
-  await db.from("leads").update({ ...patch, last_result: result.slice(0, 500) }).eq("id", lead.id).eq("status", "calling");
+  const { data: row } = await db
+    .from("leads")
+    .update({ ...patch, last_result: result.slice(0, 500) })
+    .eq("id", lead.id)
+    .eq("status", "calling")
+    .select("id, client_id, name, phone, email, tags, status, attempts")
+    .maybeSingle();
+  if (row && (row.status === "done" || row.status === "failed")) {
+    await emit({
+      type: row.status === "done" ? "lead_talked" : "lead_no_answer",
+      clientId: row.client_id,
+      key: `lead:${row.id}:${row.status}:${row.attempts}`,
+      contact: { name: row.name, phone: row.phone, email: row.email, leadId: row.id },
+      lead: { id: row.id, tags: row.tags as string[] },
+    });
+  }
 }
 
 async function runClient(db: Db, s: DialerSettings): Promise<number> {

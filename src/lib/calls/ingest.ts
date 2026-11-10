@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import * as voice from "@/lib/voice/elevenlabs";
 import { settleFromCall } from "@/lib/dialer/run";
 import { notify } from "@/lib/notify";
+import { emit } from "@/lib/automations/engine";
 
 /**
  * Verifies the provider's webhook signature: header "t=<unix>,v0=<hex>", where
@@ -58,6 +59,28 @@ export async function ingestConversation(c: voice.ProviderConversation): Promise
     { onConflict: "provider_conversation_id" },
   );
   if (error) throw new Error(error.message);
+  if (c.status === "done" || !c.status) {
+    const ext = phone?.external_number ?? "";
+    const { data: lead } = ext
+      ? await db.from("leads").select("id, name, email, tags").eq("client_id", agent.client_id).eq("phone", ext).maybeSingle()
+      : { data: null };
+    const { data: ag } = await db.from("agents").select("name").eq("id", agent.id).single();
+    await emit({
+      type: "call_ended",
+      clientId: agent.client_id,
+      key: `call:${c.conversation_id}`,
+      contact: { name: lead?.name ?? "", phone: ext, email: lead?.email ?? "", leadId: lead?.id },
+      lead: lead ? { id: lead.id, tags: lead.tags as string[] } : undefined,
+      call: {
+        id: c.conversation_id,
+        direction,
+        outcome: OUTCOMES.has(outcome) ? outcome : "unknown",
+        summary: c.analysis?.transcript_summary ?? "",
+        duration: Math.round(c.metadata?.call_duration_secs ?? 0),
+        agentName: ag?.name,
+      },
+    });
+  }
   if (direction === "outbound") {
     const userSpoke = (c.transcript ?? []).some((t) => t.role === "user" && t.message?.trim());
     await settleFromCall(c.conversation_id, Math.round(c.metadata?.call_duration_secs ?? 0), userSpoke, c.analysis?.transcript_summary ?? "");
@@ -105,8 +128,13 @@ export async function backfillClient(clientId: string, perAgent = 50): Promise<n
   for (const a of agents ?? []) {
     const ids = await voice.listConversationIds(a.provider_agent_id as string, perAgent);
     if (!ids.length) continue;
-    const { data: known } = await db.from("calls").select("provider_conversation_id").in("provider_conversation_id", ids);
-    const have = new Set((known ?? []).map((k) => k.provider_conversation_id));
+    const { data: known } = await db.from("calls").select("provider_conversation_id, transcript, status").in("provider_conversation_id", ids);
+    // Outbound calls are recorded when placed; they still need the conversation's transcript.
+    const have = new Set(
+      (known ?? [])
+        .filter((k) => (k.transcript as unknown[]).length > 0 || k.status === "failed" || k.status === "no_answer")
+        .map((k) => k.provider_conversation_id),
+    );
     for (const id of ids.filter((i) => !have.has(i))) {
       const c = await voice.getConversation(id);
       if (c.status && !["done", "failed"].includes(c.status)) continue; // still running

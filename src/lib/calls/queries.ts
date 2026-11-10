@@ -5,7 +5,7 @@ type Db = {
   from: (t: string) => any; // eslint-disable-line @typescript-eslint/no-explicit-any
 };
 
-const LIST = "id, direction, external_number, outcome, started_at, duration_secs, summary, agents(name)";
+const LIST = "id, direction, external_number, outcome, status, end_reason, started_at, duration_secs, summary, agents(name)";
 
 type Raw = Omit<CallListItem, "agent_name" | "client_name"> & { agents: { name: string } | null; clients?: { name: string } | null };
 const flat = (r: Raw): CallListItem => ({ ...r, agent_name: r.agents?.name ?? null, client_name: r.clients?.name ?? null });

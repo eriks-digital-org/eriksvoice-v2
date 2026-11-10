@@ -32,6 +32,8 @@ function explain(status: number, body: string): string {
     const perm = /permission[^"]*?\b([a-z_]+_(?:read|write))\b/.exec(lower)?.[1];
     return `למפתח ElevenLabs חסרה הרשאה${perm ? ` (${perm})` : ""}. ב־ElevenLabs ← API Keys עורכים את המפתח ומאפשרים Agents, Voices ו־Models.`;
   }
+  if (lower.includes("live moderation"))
+    return "הקול שנבחר מוגן אצל ElevenLabs (live moderation) ואי אפשר לשים אותו על סוכן. בוחרים קול אחר בניהול ← סוכני AI.";
   if (lower.includes("api key id")) return "הוזן מזהה המפתח ולא המפתח עצמו (שמתחיל ב־sk_).";
   if (status === 401) return `מפתח ElevenLabs נדחה: ${body.slice(0, 160)}`;
   if (status === 524 || status === 504) return "שירות הקול לא הספיק להשיב. נסו שוב.";
@@ -71,6 +73,10 @@ const genderOf = (v?: string | null): Voice["gender"] => {
   return g === "female" || g === "male" ? g : "";
 };
 
+/** Voices with live moderation can't be used on agents. */
+const moderated = (v: { live_moderation_enabled?: boolean; safety_control?: string | null; sharing?: { live_moderation_enabled?: boolean } | null }) =>
+  Boolean(v.live_moderation_enabled || v.sharing?.live_moderation_enabled || (v.safety_control && v.safety_control !== "NONE"));
+
 /** Every voice in the account's library (premade and added). */
 export async function listVoices(): Promise<Voice[]> {
   const out: Voice[] = [];
@@ -85,11 +91,15 @@ export async function listVoices(): Promise<Voice[]> {
         labels?: Record<string, string>;
         preview_url?: string | null;
         verified_languages?: { language?: string; preview_url?: string | null }[] | null;
+        live_moderation_enabled?: boolean;
+        safety_control?: string | null;
+        sharing?: { live_moderation_enabled?: boolean } | null;
       }[];
       has_more: boolean;
       next_page_token: string | null;
     }>(`/v2/voices?${q}`);
     for (const v of r.voices) {
+      if (moderated(v)) continue; // the voice service refuses these on agents
       const l = v.labels ?? {};
       const he = (v.verified_languages ?? []).find((x) => isHe(x.language));
       out.push({
@@ -123,10 +133,12 @@ export async function listHebrewLibraryVoices(): Promise<Voice[]> {
         accent?: string;
         descriptive?: string;
         preview_url?: string | null;
+        live_moderation_enabled?: boolean;
       }[];
       has_more: boolean;
     }>(`/v1/shared-voices?${q}`);
     for (const v of r.voices) {
+      if (v.live_moderation_enabled) continue;
       out.push({
         id: v.voice_id,
         name: v.name,
