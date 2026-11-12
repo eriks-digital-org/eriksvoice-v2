@@ -14,6 +14,8 @@ import { AgentAdminCard } from "./AgentAdminCard";
 import { loadCatalog } from "@/lib/voice/catalog";
 import { isTwilioConfigured, listOwnedNumbers, type OwnedNumber } from "@/lib/telephony/twilio";
 import { NumbersPanel } from "./NumbersPanel";
+import { CrmPanel } from "./CrmPanel";
+import { crmBaseUrl, crmHookSecret, crmKey, type CrmConfig } from "@/lib/crm/erikscrm";
 
 export default async function ClientPage({ params }: { params: Promise<{ id: string }> }) {
   await requireAdmin();
@@ -31,7 +33,12 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
     db.from("connections").select("id", { count: "exact", head: true }).eq("client_id", id).eq("status", "connected"),
     db.from("connections").select("flow_url").eq("client_id", id).eq("kind", "activepieces").maybeSingle(),
   ]);
-  const { data: conns } = await db.from("connections").select("kind, status, last_error, requested_at").eq("client_id", id);
+  const [{ data: conns }, crmBase, crmKeySaved, crmHook] = await Promise.all([
+    db.from("connections").select("kind, status, last_error, requested_at, config").eq("client_id", id),
+    crmBaseUrl(),
+    crmKey(id),
+    crmHookSecret(id),
+  ]);
   const connOf = (kind: string) => (conns ?? []).find((c) => c.kind === kind) as { status: ConnStatus; last_error: string | null; requested_at: string | null } | undefined;
   const site = process.env.NEXT_PUBLIC_SITE_URL ?? "https://eriksvoice.co.il";
   const agentList = (agents ?? []) as AgentRow[];
@@ -159,7 +166,7 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
 
       <Panel title="חיבורי הלקוח" subtitle="אחרי שמחברים את השירות ב־Activepieces ובודקים, מסמנים כאן ״מחובר״. הלקוח רואה את הסטטוס.">
         <ul className="divide-y divide-border">
-          {CONNECTIONS.filter((c) => !c.later).map((c) => {
+          {CONNECTIONS.filter((c) => !c.later && c.kind !== "erikscrm").map((c) => {
             const cur = connOf(c.kind);
             const st = cur?.status ?? "off";
             return (
@@ -186,6 +193,17 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
             );
           })}
         </ul>
+      </Panel>
+
+      <Panel title="ERIKSCRM" subtitle="זיהוי מתקשר מה־CRM, רישום שיחות, עדכון לידים מהאוטומציות, ולידים חדשים מה־CRM.">
+        <CrmPanel
+          clientId={client.id}
+          baseUrlSet={Boolean(crmBase)}
+          hasKey={Boolean(crmKeySaved)}
+          hasHookSecret={Boolean(crmHook)}
+          hookUrl={`${site}/api/public/crm/${(client as ClientRow & { inbound_token?: string }).inbound_token}`}
+          importLeads={((conns ?? []).find((c) => c.kind === "erikscrm")?.config as CrmConfig | undefined)?.import_leads !== false}
+        />
       </Panel>
 
       <Panel title="אזור מסוכן">

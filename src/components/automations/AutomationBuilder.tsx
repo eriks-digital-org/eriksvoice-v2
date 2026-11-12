@@ -84,6 +84,11 @@ export function AutomationBuilder({
             <Input value={spec.trigger.config.tag ?? ""} onChange={(e) => setConfig("tag", e.target.value)} className={inputCls} />
           </Field>
         )}
+        {spec.trigger.type === "crm_status" && (
+          <Field label="רק כשהסטטוס החדש הוא" hint="בדיוק כמו ב־CRM. ריק = כל שינוי">
+            <Input value={spec.trigger.config.status ?? ""} onChange={(e) => setConfig("status", e.target.value)} className={inputCls} placeholder="בתהליך" />
+          </Field>
+        )}
         {spec.trigger.type === "webhook_in" && (
           <Field label="רק אירוע בשם" hint='השדה "event" בנתונים. ריק = כל מה שנכנס'>
             <Input value={spec.trigger.config.event ?? ""} onChange={(e) => setConfig("event", e.target.value)} dir="ltr" className={`${inputCls} text-end`} placeholder="meeting_booked" />

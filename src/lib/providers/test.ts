@@ -46,6 +46,18 @@ export async function testProvider(key: ProviderDef["key"], adminEmail?: string)
         ? { ok: true, message: `נשלח מייל בדיקה ל־${adminEmail}` }
         : { ok: false, message: "השליחה נכשלה. בודקים את המפתח ושהדומיין eriksvoice.co.il מאומת ב־Utobo." };
     }
+    case "erikscrm": {
+      const url = (await getSecret("erikscrm_base_url"))?.replace(/\/+$/, "");
+      if (!url) return { ok: false, message: "אין כתובת" };
+      const health = await get(`${url}/health`, {});
+      if (health?.ok && (health.headers.get("content-type") ?? "").includes("json")) return { ok: true, message: "ה־API באוויר. את המפתח של כל עסק מזינים בדף הלקוח" };
+      // Without a key the API answers 401 in JSON; a website answers HTML.
+      const r = await get(`${url}/statuses`, {});
+      if (!r) return { ok: false, message: "הכתובת לא הגיבה" };
+      const type = r.headers.get("content-type") ?? "";
+      if (!type.includes("json")) return { ok: false, message: "הכתובת מחזירה דף אתר ולא API. צריך את כתובת הפונקציה עצמה" };
+      return r.status === 401 ? { ok: true, message: "ה־API עונה. את המפתח של כל עסק מזינים בדף הלקוח" } : { ok: true, message: `ה־API עונה (${r.status})` };
+    }
     case "activepieces": {
       const url = (await getSecret("activepieces_url"))?.replace(/\/+$/, "");
       if (!url) return { ok: false, message: "אין כתובת" };

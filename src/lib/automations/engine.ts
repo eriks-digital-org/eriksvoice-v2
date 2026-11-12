@@ -7,6 +7,7 @@ import { sendMail } from "@/lib/notify/mail";
 import { notify } from "@/lib/notify";
 import { getSecret } from "@/lib/providers/secrets";
 import { inWindow, israelNow } from "@/lib/time";
+import * as crm from "@/lib/crm/erikscrm";
 import { render, type AutomationSpec, type TriggerType } from "./catalog";
 
 type Db = ReturnType<typeof createAdminClient>;
@@ -18,7 +19,9 @@ export interface AutomationEvent {
   /** Stable id of what happened (call id, lead id + status, webhook id…), for de-duplication. */
   key: string;
   contact?: { name?: string; phone?: string; email?: string; leadId?: string };
-  call?: { id: string; direction: string; outcome: string; summary: string; duration: number; agentName?: string };
+  call?: { id: string; direction: string; outcome: string; summary: string; duration: number; agentName?: string; startedAt?: string };
+  /** crm_status (and leads that came from the CRM) */
+  crm?: { leadId: string; status?: string; previousStatus?: string };
   lead?: { id: string; tags: string[] };
   /** webhook_in */
   name?: string;
@@ -56,6 +59,7 @@ function matches(spec: AutomationSpec, e: AutomationEvent): boolean {
   }
   if (e.lead && c.tag && !e.lead.tags.includes(c.tag)) return false;
   if (e.type === "webhook_in" && c.event && c.event !== e.name) return false;
+  if (e.type === "crm_status" && c.status && c.status.trim() !== (e.crm?.status ?? "")) return false;
   return true;
 }
 
@@ -109,6 +113,7 @@ async function enqueueScheduled(db: Db) {
 }
 
 interface Ctx {
+  runId: string;
   db: Db;
   clientId: string;
   client: { name: string; slug: string };
@@ -164,7 +169,46 @@ async function activepieces(ctx: Ctx, config: Record<string, string>): Promise<s
   return `נשלח ל־Activepieces (${config.action})`;
 }
 
-async function runAction(ctx: Ctx, a: AutomationSpec["actions"][number]): Promise<string> {
+/** The CRM card this run is about: from the event, or found / created by phone. */
+async function crmLead(ctx: Ctx): Promise<string> {
+  if (ctx.event.crm?.leadId) return ctx.event.crm.leadId;
+  const phone = ctx.vars.phone;
+  if (!phone) throw new Error("אין מספר טלפון לחיפוש ב־CRM");
+  const lead = await crm.ensureLead(ctx.clientId, phone, ctx.vars.name, `ev-${ctx.runId}-lead`);
+  ctx.event.crm = { leadId: lead.id, status: lead.status ?? undefined };
+  return lead.id;
+}
+
+/** Idempotency key for a CRM write of one action of one run (the same on a retry). */
+const crmKey = (ctx: Ctx, i: number, what: string) => `ev-${ctx.runId}-${i}-${what}`;
+
+async function crmLogCall(ctx: Ctx, i: number, c: Record<string, string>): Promise<string> {
+  const call = ctx.event.call;
+  if (!call) throw new Error("האוטומציה לא התחילה משיחה");
+  const leadId = await crmLead(ctx);
+  const { data: row } = await ctx.db.from("calls").select("transcript, started_at").eq("provider_conversation_id", call.id).maybeSingle();
+  const turns = ((row?.transcript as { role: string; text: string }[] | undefined) ?? []).map((t) => `${t.role === "agent" ? "סוכן" : "לקוח"}: ${t.text}`);
+  await crm.addActivity(
+    ctx.clientId,
+    leadId,
+    {
+      type: "call",
+      direction: call.direction === "outbound" ? "outbound" : "inbound",
+      occurred_at: (row?.started_at as string | undefined) ?? call.startedAt ?? new Date().toISOString(),
+      duration_seconds: Math.min(86400, Math.max(0, Math.round(call.duration))),
+      outcome: "answered",
+      agent_name: (call.agentName || "סוכן קולי").slice(0, 200),
+      summary: (call.summary || "אין סיכום").slice(0, 10000),
+      transcript: (turns.join("\n") || "אין תמליל").slice(0, 200000),
+      external_call_id: call.id,
+    },
+    crmKey(ctx, i, "call"),
+  );
+  if (c.tag?.trim()) await crm.updateLead(ctx.clientId, leadId, { tags_add: [render(c.tag, ctx.vars).trim()] }, crmKey(ctx, i, "tag"));
+  return "השיחה נרשמה בכרטיס הליד ב־CRM";
+}
+
+async function runAction(ctx: Ctx, a: AutomationSpec["actions"][number], i: number): Promise<string> {
   const c = a.config ?? {};
   const phone = ctx.vars.phone;
   switch (a.type) {
@@ -218,6 +262,43 @@ async function runAction(ctx: Ctx, a: AutomationSpec["actions"][number]): Promis
     }
     case "activepieces":
       return activepieces(ctx, c);
+    case "crm_log_call":
+      return crmLogCall(ctx, i, c);
+    case "crm_status": {
+      const leadId = await crmLead(ctx);
+      const body: Record<string, unknown> = {};
+      const status = render(c.status ?? "", ctx.vars).trim();
+      const tag = render(c.tag ?? "", ctx.vars).trim();
+      if (status) body.status = status;
+      if (tag) body.tags_add = [tag];
+      if (!status && !tag) throw new Error("לא נבחר סטטוס או תגית");
+      await crm.updateLead(ctx.clientId, leadId, body, crmKey(ctx, i, "update"));
+      return `הליד עודכן ב־CRM${status ? ` לסטטוס ${status}` : ""}`;
+    }
+    case "crm_note": {
+      const leadId = await crmLead(ctx);
+      const note = render(c.text ?? "", ctx.vars).trim();
+      if (!note) throw new Error("ההערה ריקה");
+      await crm.addNote(ctx.clientId, leadId, note.slice(0, 10000), crmKey(ctx, i, "note"));
+      return "נוספה הערה ב־CRM";
+    }
+    case "crm_task": {
+      const leadId = await crmLead(ctx);
+      const hours = Math.min(24 * 60, Math.max(0, Number(c.hours) || 24));
+      await crm.addTask(
+        ctx.clientId,
+        leadId,
+        {
+          title: (render(c.title ?? "", ctx.vars).trim() || `לחזור אל ${ctx.vars.name || ctx.vars.phone}`).slice(0, 200),
+          starts_at: new Date(Date.now() + hours * 3600_000).toISOString(),
+          duration_seconds: 1800,
+          kind: /פגיש|meeting/i.test(c.kind ?? "") ? "meeting" : "task",
+          ...(c.note?.trim() ? { note: render(c.note, ctx.vars).slice(0, 10000) } : {}),
+        },
+        crmKey(ctx, i, "task"),
+      );
+      return "נפתחה משימה ב־CRM";
+    }
   }
 }
 
@@ -240,9 +321,10 @@ async function runOne(db: Db, run: { id: string; automation_id: string; client_i
     direction: e.call ? ({ inbound: "נכנסת", outbound: "יוצאת", web: "דפדפן" } as Record<string, string>)[e.call.direction] ?? "" : "",
     duration: e.call ? `${Math.round(e.call.duration / 60)} דק׳` : "",
     date: new Date().toLocaleDateString("he-IL", { timeZone: "Asia/Jerusalem" }),
+    crm_status: e.crm?.status ?? "",
   };
   for (const [k, v] of Object.entries(e.data ?? {})) if (!(k in vars) && (typeof v === "string" || typeof v === "number")) vars[k] = String(v);
-  const ctx: Ctx = { db, clientId: run.client_id, client: client ?? { name: "", slug: "" }, spec, event: e, vars };
+  const ctx: Ctx = { runId: run.id, db, clientId: run.client_id, client: client ?? { name: "", slug: "" }, spec, event: e, vars };
 
   // Actions that already succeeded in an earlier attempt are not repeated.
   const done = new Set((run.log as { i: number; ok: boolean }[]).filter((l) => l.ok).map((l) => l.i));
@@ -251,7 +333,7 @@ async function runOne(db: Db, run: { id: string; automation_id: string; client_i
   for (const [i, action] of spec.actions.entries()) {
     if (done.has(i)) continue;
     try {
-      log.push({ i, action: action.type, ok: true, message: await runAction(ctx, action), at: new Date().toISOString() });
+      log.push({ i, action: action.type, ok: true, message: await runAction(ctx, action, i), at: new Date().toISOString() });
     } catch (err) {
       failed = err instanceof Error ? err.message : "שגיאה";
       log.push({ i, action: action.type, ok: false, message: failed, at: new Date().toISOString() });
