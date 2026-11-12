@@ -19,6 +19,9 @@ export async function callerVariables(clientId: string, phone: string): Promise<
     caller_calls: "0",
     caller_last_summary: "",
     caller_status: "",
+    // Why we are calling (outbound only), e.g. a call-back the caller asked for. Empty on inbound.
+    call_reason: "",
+    callback_request: "",
   };
   if (!phone) return vars;
   const db = createAdminClient();

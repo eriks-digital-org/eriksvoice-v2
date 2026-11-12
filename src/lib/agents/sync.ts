@@ -6,6 +6,7 @@ import { buildPrompt, namedBusiness } from "./prompt";
 import type { AllowedVoice } from "@/lib/voice/models";
 import { routeClientNumbers } from "./phones";
 import { isRealtimeModel } from "@/lib/voice/models";
+import { CALLBACK_FIELDS } from "@/lib/calls/callback-time";
 
 type Db = ReturnType<typeof createAdminClient>;
 
@@ -140,16 +141,25 @@ async function pushAgent(db: Db, agent: AgentFull, knowledge: Awaited<ReturnType
     knowledge: mine.map((i) => ({ id: i.provider_doc_id as string, name: i.title })),
     tags: [`client:${client.slug}`, `type:${agent.type_key}`],
     transfers,
+    dataCollection: CALLBACK_FIELDS,
   };
 
-  // If the provider rejects the hand-over settings, the agent is still saved without them.
+  // If the provider rejects the hand-over or the call-back settings, the agent is still
+  // saved without them (first without the hand-over, then without both).
+  const rejected = (e: unknown) => e instanceof voice.VoiceProviderError && (e.status === 400 || e.status === 422);
   const send = async <T,>(fn: (c: voice.AgentConfig) => Promise<T>): Promise<T> => {
     try {
       return await fn(config);
     } catch (e) {
-      if (!(e instanceof voice.VoiceProviderError && (e.status === 400 || e.status === 422))) throw e;
-      console.error("sync: retrying without transfer tool", e.message);
-      return fn({ ...config, transfers: [], omitTransferTool: true });
+      if (!rejected(e)) throw e;
+      console.error("sync: retrying without transfer tool", (e as Error).message);
+      try {
+        return await fn({ ...config, transfers: [], omitTransferTool: true });
+      } catch (e2) {
+        if (!rejected(e2)) throw e2;
+        console.error("sync: retrying without call-back fields", (e2 as Error).message);
+        return fn({ ...config, transfers: [], omitTransferTool: true, dataCollection: undefined });
+      }
     }
   };
   if (agent.provider_agent_id) {

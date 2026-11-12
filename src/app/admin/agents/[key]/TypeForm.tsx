@@ -52,7 +52,7 @@ export function TypeForm({
         </Field>
         <Field
           label="פרומפט (תבנית הסוג)"
-          hint="טון דיבור, אופי, מטרות והנחיות. בלי שם של עסק: פרטי העסק והידע של כל לקוח מתווספים אוטומטית."
+          hint="טון דיבור, אופי, מטרות והנחיות. בלי שם של עסק: פרטי העסק והידע של כל לקוח מתווספים אוטומטית. משתנים שאפשר לשלב: {{caller_name}} {{caller_known}} {{caller_last_summary}} {{caller_status}} {{call_reason}} (למשל ״חזרה ללקוח שביקש שנחזור אליו״) {{callback_request}}."
           className="sm:col-span-2"
         >
           <Textarea name="prompt" defaultValue={type.prompt} rows={16} className="rounded-2xl text-[16px] leading-relaxed" />
