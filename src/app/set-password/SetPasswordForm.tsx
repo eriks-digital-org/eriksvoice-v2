@@ -14,28 +14,27 @@ import { changePasswordAction } from "./actions";
  * src/proxy.ts), or after a reset link. The link opens a session (/auth/confirm), or
  * brings it in the address fragment (#access_token=…); all end here.
  */
-export function SetPasswordForm() {
-  const [ready, setReady] = useState<"checking" | "ok" | "no-session">("checking");
+export function SetPasswordForm({ signedIn }: { signedIn: boolean }) {
+  const [ready, setReady] = useState<"checking" | "ok" | "no-session">(signedIn ? "ok" : "checking");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
+    if (signedIn) return;
+    // Only an old-style link brings the session in the address (#access_token=…).
+    const hash = new URLSearchParams(window.location.hash.slice(1));
+    const access_token = hash.get("access_token");
+    const refresh_token = hash.get("refresh_token");
     const supabase = createClient();
     (async () => {
-      const hash = new URLSearchParams(window.location.hash.slice(1));
-      const access_token = hash.get("access_token");
-      const refresh_token = hash.get("refresh_token");
-      if (access_token && refresh_token) {
-        await supabase.auth.setSession({ access_token, refresh_token });
-        history.replaceState(null, "", window.location.pathname);
-      }
-      const { data } = await supabase.auth.getUser();
-      // From here the server owns the session (it refreshes it after saving); a refresh
-      // in this tab with the old token would sign the user out.
+      if (!access_token || !refresh_token) return setReady("no-session");
+      const { error } = await supabase.auth.setSession({ access_token, refresh_token });
+      history.replaceState(null, "", window.location.pathname);
+      // From here the server owns the session; a refresh in this tab would race it.
       await supabase.auth.stopAutoRefresh();
-      setReady(data.user ? "ok" : "no-session");
+      setReady(error ? "no-session" : "ok");
     })();
-  }, []);
+  }, [signedIn]);
 
   async function submit(form: FormData) {
     const password = String(form.get("password") ?? "");

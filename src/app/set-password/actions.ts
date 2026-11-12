@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { getAccess, homeFor } from "@/lib/auth";
+import { homeForUser } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 /**
@@ -18,16 +18,17 @@ export async function changePasswordAction(password: string): Promise<{ error?: 
   const { data } = await supabase.auth.getUser();
   if (!data.user) return { error: "החיבור פג. נכנסים שוב עם הסיסמה הזמנית." };
   const { error } = await supabase.auth.updateUser({ password });
+  if (error) console.error("set-password: update", error.status, error.code, error.message);
   if (error) {
     if (error.code === "same_password") return { error: "זו הסיסמה הנוכחית. בוחרים סיסמה אחרת." };
     if (error.code === "weak_password") return { error: "הסיסמה חלשה מדי. משלבים אותיות, ספרות וסימנים." };
-    return { error: "השמירה נכשלה. נסו שוב." };
+    if (error.code === "reauthentication_needed") return { error: "צריך להיכנס מחדש עם הסיסמה הזמנית ואז לבחור סיסמה." };
+    return { error: `השמירה נכשלה (${error.code ?? error.status}). נסו שוב.` };
   }
   if (data.user.app_metadata?.must_change_password) {
     await createAdminClient().auth.admin.updateUserById(data.user.id, { app_metadata: { must_change_password: false } });
     const { error: refreshError } = await supabase.auth.refreshSession();
     if (refreshError) console.error("set-password: refresh", refreshError.code, refreshError.message);
   }
-  const access = await getAccess();
-  redirect((access && homeFor(access)) || "/login?error=no-access");
+  redirect(await homeForUser(data.user.id, data.user.email ?? ""));
 }

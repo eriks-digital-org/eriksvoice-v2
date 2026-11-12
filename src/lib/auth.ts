@@ -57,6 +57,24 @@ export function homeFor(access: Access): string | null {
   return first ? `/${first.slug}` : null;
 }
 
+/**
+ * Where a user goes right after signing in or choosing a password, from their id
+ * (inside a server action, before the new session cookies are readable).
+ */
+export async function homeForUser(userId: string, email: string): Promise<string> {
+  const db = createAdminClient();
+  const [{ data: profile }, { data: rows }] = await Promise.all([
+    db.from("profiles").select("is_admin").eq("id", userId).maybeSingle(),
+    db.from("client_members").select("clients(slug, name)").eq("user_id", userId),
+  ]);
+  if (profile?.is_admin || (await promoteListedAdmin(userId, email))) return "/admin";
+  const slugs = (rows ?? [])
+    .map((r) => r.clients as unknown as { slug: string; name: string } | null)
+    .filter((c): c is { slug: string; name: string } => Boolean(c))
+    .sort((a, b) => a.name.localeCompare(b.name, "he"));
+  return slugs[0] ? `/${slugs[0].slug}` : "/login?error=no-access";
+}
+
 /** Admin panel pages and actions. */
 export async function requireAdmin(): Promise<Access> {
   const access = await getAccess();
