@@ -26,10 +26,10 @@ async function clientName(clientId: string) {
   return (data?.name as string | undefined) ?? "";
 }
 
-function passwordMail(email: string, password: string, business: string, origin: string, reset: boolean) {
+function passwordMail(email: string, password: string, business: string, origin: string, reset: boolean, name = "") {
   const subject = reset ? "סיסמה זמנית חדשה ל־EriksVoice" : `הוזמנת ל־EriksVoice${business ? ` של ${business}` : ""}`;
   const text = [
-    "שלום,",
+    name ? `שלום ${name},` : "שלום,",
     "",
     reset
       ? "הסיסמה שלך ל־EriksVoice אופסה."
@@ -46,13 +46,15 @@ function passwordMail(email: string, password: string, business: string, origin:
 }
 
 /** Adds a user to a client: a new address gets an account with a temporary password. */
-export async function inviteMember(clientId: string, email: string): Promise<MemberResult> {
+export async function inviteMember(clientId: string, email: string, fullName: string): Promise<MemberResult> {
   const db = createAdminClient();
   const address = email.trim().toLowerCase();
+  const name = fullName.trim().slice(0, 120);
   const [origin, business] = await Promise.all([siteOrigin(), clientName(clientId)]);
 
-  const { data: existing } = await db.from("profiles").select("id").eq("email", address).maybeSingle();
+  const { data: existing } = await db.from("profiles").select("id, full_name").eq("email", address).maybeSingle();
   if (existing) {
+    if (name && !existing.full_name) await db.from("profiles").update({ full_name: name }).eq("id", existing.id);
     const { error } = await db.from("client_members").upsert({ client_id: clientId, user_id: existing.id });
     if (error) return { ok: false, error: "שיוך המשתמש ללקוח נכשל" };
     const emailed = await sendMail(
@@ -70,6 +72,7 @@ export async function inviteMember(clientId: string, email: string): Promise<Mem
     email: address,
     password,
     email_confirm: true,
+    user_metadata: { full_name: name },
     app_metadata: { must_change_password: true },
   });
   if (error || !data.user) {
@@ -81,21 +84,34 @@ export async function inviteMember(clientId: string, email: string): Promise<Mem
     await db.auth.admin.deleteUser(data.user.id);
     return { ok: false, error: "שיוך המשתמש ללקוח נכשל" };
   }
-  const emailed = await passwordMail(address, password, business, origin, false);
+  // The profile row is made by a trigger; the name is set here too in case it ran first.
+  if (name) await db.from("profiles").update({ full_name: name }).eq("id", data.user.id);
+  const emailed = await passwordMail(address, password, business, origin, false, name);
   return { ok: true, tempPassword: password, emailed };
 }
 
 /** A new temporary password for a user (they must change it at the next sign-in). */
 export async function resetMemberPassword(userId: string): Promise<MemberResult> {
   const db = createAdminClient();
-  const { data: profile } = await db.from("profiles").select("email, is_admin").eq("id", userId).maybeSingle();
+  const { data: profile } = await db.from("profiles").select("email, full_name, is_admin").eq("id", userId).maybeSingle();
   if (!profile) return { ok: false, error: "המשתמש לא נמצא" };
   if (profile.is_admin) return { ok: false, error: "סיסמה של מנהל מערכת לא מאפסים מכאן" };
   const password = tempPassword();
   const { error } = await db.auth.admin.updateUserById(userId, { password, app_metadata: { must_change_password: true } });
   if (error) return { ok: false, error: "איפוס הסיסמה נכשל" };
-  const emailed = await passwordMail(profile.email as string, password, "", await siteOrigin(), true);
+  const emailed = await passwordMail(profile.email as string, password, "", await siteOrigin(), true, (profile.full_name as string) ?? "");
   return { ok: true, tempPassword: password, emailed };
+}
+
+/** Changes a user's display name ("שלום <שם>"). */
+export async function renameMember(userId: string, fullName: string): Promise<MemberResult> {
+  const name = fullName.trim().slice(0, 120);
+  if (name.length < 2) return { ok: false, error: "שם קצר מדי" };
+  const db = createAdminClient();
+  const { error } = await db.from("profiles").update({ full_name: name }).eq("id", userId);
+  if (error) return { ok: false, error: "שמירת השם נכשלה" };
+  await db.auth.admin.updateUserById(userId, { user_metadata: { full_name: name } });
+  return { ok: true, emailed: false };
 }
 
 /** Takes a user out of one client (the account stays). */
