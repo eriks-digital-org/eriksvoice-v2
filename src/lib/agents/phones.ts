@@ -17,12 +17,14 @@ export async function routeClientNumbers(clientId: string): Promise<{ ok: boolea
   const [{ data: numbers }, { data: agents }, { data: client }] = await Promise.all([
     db.from("phone_numbers").select("id, e164, agent_id, provider_phone_id").eq("client_id", clientId),
     db.from("agents").select("id, name, status, provider_agent_id").eq("client_id", clientId),
-    db.from("clients").select("name").eq("id", clientId).single(),
+    db.from("clients").select("name, status").eq("id", clientId).single(),
   ]);
+  // A paused client: its numbers reach no agent (they stay with it, and come back on resume).
+  const paused = client?.status === "paused";
   let firstError: string | undefined;
   for (const n of numbers ?? []) {
     const agent = (agents ?? []).find((a) => a.id === n.agent_id);
-    const target = agent && agent.status === "active" && agent.provider_agent_id ? (agent.provider_agent_id as string) : null;
+    const target = !paused && agent && agent.status === "active" && agent.provider_agent_id ? (agent.provider_agent_id as string) : null;
     try {
       let phoneId = n.provider_phone_id as string | null;
       if (!phoneId && target) {
@@ -74,6 +76,8 @@ export async function callOut(
   const db = createAdminClient();
   const { data: agent } = await db.from("agents").select("client_id, status, provider_agent_id").eq("id", agentId).maybeSingle();
   if (!agent?.provider_agent_id || agent.status !== "active") return { ok: false, error: "קודם מפעילים את הסוכן" };
+  const { data: owner } = await db.from("clients").select("status").eq("id", agent.client_id).single();
+  if (owner?.status === "paused") return { ok: false, error: "הלקוח מושהה. מפעילים אותו מחדש בדף הלקוח" };
   let number = await outboundNumberFor(agentId);
   if (!number) return { ok: false, error: "ללקוח אין מספר טלפון" };
   // Every attempt is recorded, so the calls screen shows failed and live calls too.

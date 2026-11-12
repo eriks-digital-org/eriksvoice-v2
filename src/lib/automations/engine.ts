@@ -67,6 +67,8 @@ function matches(spec: AutomationSpec, e: AutomationEvent): boolean {
 export async function emit(e: AutomationEvent): Promise<void> {
   try {
     const db = createAdminClient();
+    const { data: client } = await db.from("clients").select("status").eq("id", e.clientId).maybeSingle();
+    if (!client || client.status === "paused") return;
     const { data } = await db.from("automations").select("id, spec").eq("client_id", e.clientId).eq("enabled", true);
     for (const a of data ?? []) {
       const spec = a.spec as AutomationSpec;
@@ -309,7 +311,11 @@ async function runOne(db: Db, run: { id: string; automation_id: string; client_i
     return;
   }
   const spec = a.spec as AutomationSpec;
-  const { data: client } = await db.from("clients").select("name, slug").eq("id", run.client_id).single();
+  const { data: client } = await db.from("clients").select("name, slug, status").eq("id", run.client_id).single();
+  if (client?.status === "paused") {
+    await db.from("automation_runs").update({ status: "skipped", finished_at: new Date().toISOString(), last_error: "הלקוח מושהה" }).eq("id", run.id);
+    return;
+  }
   const e = run.event;
   const vars: Record<string, string> = {
     name: e.contact?.name ?? "",
