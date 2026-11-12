@@ -12,6 +12,7 @@ import { connectionStatusAction, flowUrlAction, resyncAction, setStatusAction } 
 import { CONNECTIONS } from "@/lib/connections";
 import { ConnBadge, type ConnStatus } from "@/components/ds/StatusBadge";
 import { AgentAdminCard } from "./AgentAdminCard";
+import { agentTypeNames } from "@/lib/data/agent-type-names";
 import { loadCatalog } from "@/lib/voice/catalog";
 import { isTwilioConfigured, listOwnedNumbers, type OwnedNumber } from "@/lib/telephony/twilio";
 import { NumbersPanel } from "./NumbersPanel";
@@ -34,11 +35,12 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
     db.from("connections").select("id", { count: "exact", head: true }).eq("client_id", id).eq("status", "connected"),
     db.from("connections").select("flow_url").eq("client_id", id).eq("kind", "activepieces").maybeSingle(),
   ]);
-  const [{ data: conns }, crmBase, crmKeySaved, crmHook] = await Promise.all([
+  const [{ data: conns }, crmBase, crmKeySaved, crmHook, typeNames] = await Promise.all([
     db.from("connections").select("kind, status, last_error, requested_at, config").eq("client_id", id),
     crmBaseUrl(),
     crmKey(id),
     crmHookSecret(id),
+    agentTypeNames(),
   ]);
   const connOf = (kind: string) => (conns ?? []).find((c) => c.kind === kind) as { status: ConnStatus; last_error: string | null; requested_at: string | null } | undefined;
   const site = process.env.NEXT_PUBLIC_SITE_URL ?? "https://eriksvoice.co.il";
@@ -120,7 +122,7 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
       >
         <ul className="grid gap-3 lg:grid-cols-2">
           {agentList.map((a) => (
-            <AgentAdminCard key={a.id} agent={a} voices={catalog.voices.filter((v) => v.source === "account")} llms={catalog.llms} />
+            <AgentAdminCard key={a.id} agent={a} typeName={typeNames[a.type_key] ?? a.type_key} voices={catalog.voices.filter((v) => v.source === "account")} llms={catalog.llms} />
           ))}
         </ul>
       </Panel>
