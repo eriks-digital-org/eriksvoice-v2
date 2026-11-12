@@ -56,3 +56,14 @@ export async function setSecret(name: string, value: string, userId: string) {
   await db.from("provider_secret_log").insert({ name, action: value ? "set" : "clear", changed_by: userId });
   cache = null;
 }
+
+/**
+ * Per-client secrets (the client's CRM key, its webhook signing secret). Not provider fields,
+ * so they never show on the providers screen. Names: crm_key_<hex>, crm_hook_<hex>.
+ */
+export async function setClientSecret(name: string, value: string) {
+  if (!/^crm_(key|hook)_[0-9a-f]{32}$/.test(name)) throw new Error("unknown secret");
+  const { error } = await createAdminClient().rpc("app_secret_set", { p_name: name, p_value: value });
+  if (error) throw new Error(error.message);
+  cache = null;
+}

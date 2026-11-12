@@ -9,10 +9,23 @@ export type TriggerType =
   | "lead_talked"
   | "lead_no_answer"
   | "webhook_in"
+  | "crm_status"
   | "daily"
   | "weekly";
 
-export type ActionType = "call_now" | "sms" | "email_contact" | "notify_team" | "webhook" | "lead_tag" | "report" | "activepieces";
+export type ActionType =
+  | "call_now"
+  | "sms"
+  | "email_contact"
+  | "notify_team"
+  | "webhook"
+  | "lead_tag"
+  | "report"
+  | "activepieces"
+  | "crm_log_call"
+  | "crm_status"
+  | "crm_note"
+  | "crm_task";
 
 export type HoursMode = "always" | "business" | "after" | "custom";
 
@@ -31,6 +44,8 @@ export interface AutomationSpec {
       day?: number;
       /** lead_*: only leads in this folder ("" = any) */
       tag?: string;
+      /** crm_status: only this new CRM status ("" = any change) */
+      status?: string;
     };
   };
   hours: { mode: HoursMode; start?: string; end?: string; days?: number[] };
@@ -57,6 +72,7 @@ export const TRIGGERS: { type: TriggerType; label: string; phrase: string; hint:
   { type: "lead_talked", label: "ליד שוחח עם הסוכן", phrase: "ליד מרשימת החיוג שוחח עם הסוכן", hint: "אחרי שיחה מהתותח" },
   { type: "lead_no_answer", label: "ליד לא ענה בכל הניסיונות", phrase: "ליד לא עונה בכל הניסיונות", hint: "אחרי הניסיון האחרון" },
   { type: "webhook_in", label: "נתונים נכנסו ב־Webhook", phrase: "מגיעים נתונים לכתובת ה־Webhook", hint: "טופס באתר, Activepieces, מערכת אחרת" },
+  { type: "crm_status", label: "סטטוס השתנה ב־CRM", phrase: "ליד משנה סטטוס ב־CRM", hint: "כשמעבירים ליד לשלב אחר ב־ERIKSCRM" },
   { type: "daily", label: "כל יום בשעה קבועה", phrase: "כל יום", hint: "למשל סיכום יומי" },
   { type: "weekly", label: "פעם בשבוע", phrase: "פעם בשבוע", hint: "למשל דוח שבועי" },
 ];
@@ -118,6 +134,42 @@ export const ACTIONS: { type: ActionType; label: string; phrase: string; fields:
       { key: "params", label: "פרטים (שורה לכל ערך: שם=ערך)", kind: "textarea", optional: true, placeholder: "to={{email}}\nsubject=…" },
     ],
   },
+  {
+    type: "crm_log_call",
+    label: "רישום השיחה ב־CRM",
+    phrase: "השיחה נרשמת בכרטיס הליד ב־CRM",
+    needsContact: true,
+    fields: [{ key: "tag", label: "תגית להוספה בכרטיס", kind: "text", optional: true, placeholder: "שיחת סוכן" }],
+  },
+  {
+    type: "crm_status",
+    label: "עדכון סטטוס ב־CRM",
+    phrase: "הליד מתעדכן ב־CRM",
+    needsContact: true,
+    fields: [
+      { key: "status", label: "סטטוס חדש", kind: "text", optional: true, hint: "בדיוק כמו ב־CRM, למשל: בתהליך" },
+      { key: "tag", label: "תגית להוספה", kind: "text", optional: true },
+    ],
+  },
+  {
+    type: "crm_note",
+    label: "הערה ב־CRM",
+    phrase: "נוספת הערה בכרטיס הליד ב־CRM",
+    needsContact: true,
+    fields: [{ key: "text", label: "ההערה", kind: "textarea", placeholder: "{{summary}}" }],
+  },
+  {
+    type: "crm_task",
+    label: "משימה / פגישה ב־CRM",
+    phrase: "נפתחת משימה לנציג ב־CRM",
+    needsContact: true,
+    fields: [
+      { key: "title", label: "כותרת", kind: "text", placeholder: "לחזור אל {{name}}" },
+      { key: "hours", label: "בעוד כמה שעות", kind: "text", optional: true, placeholder: "24" },
+      { key: "kind", label: "סוג (משימה / פגישה)", kind: "text", optional: true, placeholder: "משימה" },
+      { key: "note", label: "הערה", kind: "textarea", optional: true, placeholder: "{{summary}}" },
+    ],
+  },
 ];
 
 /** Template gallery categories. */
@@ -136,7 +188,7 @@ export const HOURS: { mode: HoursMode; label: string }[] = [
   { mode: "custom", label: "שעות שאבחר" },
 ];
 
-export const VARIABLES = ["name", "phone", "email", "summary", "agent", "business", "direction", "duration", "date"] as const;
+export const VARIABLES = ["name", "phone", "email", "summary", "agent", "business", "direction", "duration", "date", "crm_status"] as const;
 
 export const triggerOf = (t: TriggerType) => TRIGGERS.find((x) => x.type === t);
 export const actionOf = (t: ActionType) => ACTIONS.find((x) => x.type === t);

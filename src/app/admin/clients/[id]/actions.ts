@@ -9,6 +9,7 @@ import { activateAgent, pauseAgent, removeClientFromProvider, syncClient } from 
 import { callOut, releaseNumber, routeClientNumbers } from "@/lib/agents/phones";
 import { isRealtimeModel } from "@/lib/voice/models";
 import { refreshLiveCalls } from "@/lib/calls/live";
+import { saveCrmHookSecret, saveCrmKey } from "@/lib/crm/erikscrm";
 
 export type ActionState = { error?: string; ok?: string };
 
@@ -36,6 +37,8 @@ export async function deleteClientAction(_: ActionState, form: FormData): Promis
   if (!removed.ok) return { error: `מחיקת הסוכנים בשירות הקול נכשלה: ${removed.error}` };
   const { error } = await db.from("clients").delete().eq("id", clientId);
   if (error) return { error: "המחיקה נכשלה" };
+  // The client's CRM key and webhook secret (Vault).
+  await Promise.all([saveCrmKey(clientId, ""), saveCrmHookSecret(clientId, "")]).catch((e) => console.error("crm secrets cleanup", e));
   redirect("/admin/clients");
 }
 

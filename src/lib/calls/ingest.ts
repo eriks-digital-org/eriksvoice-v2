@@ -78,6 +78,7 @@ export async function ingestConversation(c: voice.ProviderConversation): Promise
         summary: c.analysis?.transcript_summary ?? "",
         duration: Math.round(c.metadata?.call_duration_secs ?? 0),
         agentName: ag?.name,
+        startedAt: start ? new Date(start * 1000).toISOString() : undefined,
       },
     });
   }

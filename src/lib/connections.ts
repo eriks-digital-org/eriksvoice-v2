@@ -13,7 +13,7 @@ export const CONNECTIONS: ConnectionKind[] = [
   { kind: "google_drive", label: "Google Drive", description: "חיפוש קבצים" },
   { kind: "webhook", label: "API / Webhook", description: "שליחת נתונים לכתובת שלכם, וקבלת לידים בכתובת שלנו" },
   { kind: "sms", label: "SMS", description: "הודעות מהמספר של הסוכן" },
-  { kind: "erikscrm", label: "ERIKSCRM", description: "זיהוי מתקשר, יצירת ליד ורישום שיחה", later: "בקרוב" },
+  { kind: "erikscrm", label: "ERIKSCRM", description: "זיהוי מתקשר, רישום שיחות בכרטיס הליד, ולידים חדשים מה־CRM" },
   { kind: "whatsapp", label: "WhatsApp", description: "שליחת הודעות והודעות נכנסות", later: "בקרוב" },
   { kind: "facebook_leads", label: "לידים מפייסבוק", description: "ליד חדש מפייסבוק כטריגר", later: "בקרוב" },
 ];

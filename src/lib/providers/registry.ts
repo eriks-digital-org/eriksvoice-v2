@@ -14,7 +14,7 @@ export interface ProviderField {
 }
 
 export interface ProviderDef {
-  key: "elevenlabs" | "twilio" | "utobo" | "activepieces";
+  key: "elevenlabs" | "twilio" | "utobo" | "activepieces" | "erikscrm";
   name: string;
   purpose: string;
   fields: ProviderField[];
@@ -67,6 +67,21 @@ export const PROVIDERS: ProviderDef[] = [
     fields: [
       { name: "activepieces_url", env: "ACTIVEPIECES_URL", label: "כתובת", secret: false, placeholder: "https://voice.eriks.co.il" },
       { name: "activepieces_signing_secret", env: "ACTIVEPIECES_SIGNING_SECRET", label: "Signing secret", secret: true, optional: true, hint: "סוד משותף לחתימת הקריאות בין המערכות" },
+    ],
+  },
+  {
+    key: "erikscrm",
+    name: "ERIKSCRM",
+    purpose: "ה־CRM של הסוכנות. מפתח לכל עסק נשמר בדף הלקוח",
+    fields: [
+      {
+        name: "erikscrm_base_url",
+        env: "ERIKSCRM_BASE_URL",
+        label: "כתובת ה־API",
+        secret: false,
+        placeholder: "https://…/functions/v1/eriksvoice-api",
+        hint: "הכתובת הציבורית של הפונקציה eriksvoice-api, בלי / בסוף",
+      },
     ],
   },
 ];
