@@ -193,6 +193,8 @@ export interface AgentConfig {
   transfers: { agentId: string; condition: string; message: string }[];
   /** Leave the transfer tool out of the request entirely (fallback if the provider rejects it). */
   omitTransferTool?: boolean;
+  /** Fields the provider extracts from every call's transcript after it ends (analysis). */
+  dataCollection?: Record<string, { type: "string" | "boolean" | "integer" | "number"; description: string }>;
 }
 
 function body(c: AgentConfig) {
@@ -238,6 +240,7 @@ function body(c: AgentConfig) {
       tts,
       ...(Object.keys(c.turn).length ? { turn: c.turn } : {}),
     },
+    ...(c.dataCollection ? { platform_settings: { data_collection: c.dataCollection } } : {}),
   };
 }
 

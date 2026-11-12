@@ -10,6 +10,7 @@ export type TriggerType =
   | "lead_no_answer"
   | "webhook_in"
   | "crm_status"
+  | "callback_requested"
   | "daily"
   | "weekly";
 
@@ -73,6 +74,7 @@ export const TRIGGERS: { type: TriggerType; label: string; phrase: string; hint:
   { type: "lead_no_answer", label: "ליד לא ענה בכל הניסיונות", phrase: "ליד לא עונה בכל הניסיונות", hint: "אחרי הניסיון האחרון" },
   { type: "webhook_in", label: "נתונים נכנסו ב־Webhook", phrase: "מגיעים נתונים לכתובת ה־Webhook", hint: "טופס באתר, Activepieces, מערכת אחרת" },
   { type: "crm_status", label: "סטטוס השתנה ב־CRM", phrase: "ליד משנה סטטוס ב־CRM", hint: "כשמעבירים ליד לשלב אחר ב־ERIKSCRM" },
+  { type: "callback_requested", label: "לקוח ביקש שיחזרו אליו", phrase: "לקוח מבקש מהסוכן שיחזרו אליו", hint: "הסוכן יתקשר בעצמו בזמן שביקש. כאן מוסיפים למשל משימה ב־CRM" },
   { type: "daily", label: "כל יום בשעה קבועה", phrase: "כל יום", hint: "למשל סיכום יומי" },
   { type: "weekly", label: "פעם בשבוע", phrase: "פעם בשבוע", hint: "למשל דוח שבועי" },
 ];
@@ -188,7 +190,7 @@ export const HOURS: { mode: HoursMode; label: string }[] = [
   { mode: "custom", label: "שעות שאבחר" },
 ];
 
-export const VARIABLES = ["name", "phone", "email", "summary", "agent", "business", "direction", "duration", "date", "crm_status"] as const;
+export const VARIABLES = ["name", "phone", "email", "summary", "agent", "business", "direction", "duration", "date", "crm_status", "callback_at", "callback_request"] as const;
 
 export const triggerOf = (t: TriggerType) => TRIGGERS.find((x) => x.type === t);
 export const actionOf = (t: ActionType) => ACTIONS.find((x) => x.type === t);

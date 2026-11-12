@@ -5,6 +5,7 @@ import * as voice from "@/lib/voice/elevenlabs";
 import { settleFromCall } from "@/lib/dialer/run";
 import { notify } from "@/lib/notify";
 import { emit } from "@/lib/automations/engine";
+import { afterCall } from "@/lib/calls/callback";
 
 /**
  * Verifies the provider's webhook signature: header "t=<unix>,v0=<hex>", where
@@ -82,9 +83,25 @@ export async function ingestConversation(c: voice.ProviderConversation): Promise
       },
     });
   }
+  const userSpoke = (c.transcript ?? []).some((t) => t.role === "user" && t.message?.trim());
+  const durationSecs = Math.round(c.metadata?.call_duration_secs ?? 0);
   if (direction === "outbound") {
-    const userSpoke = (c.transcript ?? []).some((t) => t.role === "user" && t.message?.trim());
-    await settleFromCall(c.conversation_id, Math.round(c.metadata?.call_duration_secs ?? 0), userSpoke, c.analysis?.transcript_summary ?? "");
+    await settleFromCall(c.conversation_id, durationSecs, userSpoke, c.analysis?.transcript_summary ?? "");
+  }
+  if ((c.status === "done" || !c.status) && direction !== "web") {
+    // "Call me back in an hour": schedules the agent to call, and closes call-backs this call answered.
+    const startedAt = start ? new Date(start * 1000) : new Date();
+    await afterCall({
+      clientId: agent.client_id,
+      agentId: agent.id,
+      conversationId: c.conversation_id,
+      phone: phone?.external_number ?? "",
+      startedAt,
+      endedAt: new Date(startedAt.getTime() + durationSecs * 1000),
+      talked: userSpoke && durationSecs >= 5,
+      summary: c.analysis?.transcript_summary ?? "",
+      collected,
+    }).catch((e) => console.error("callbacks: after call", c.conversation_id, e));
   }
   await checkQuota(agent.client_id);
   return true;
