@@ -4,14 +4,23 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireAdmin } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { inviteMember } from "@/lib/data/members";
+import { deleteUser, inviteMember, removeMember, resetMemberPassword, type MemberResult } from "@/lib/data/members";
 import { activateAgent, pauseAgent, removeClientFromProvider, syncClient } from "@/lib/agents/sync";
 import { callOut, releaseNumber, routeClientNumbers } from "@/lib/agents/phones";
 import { isRealtimeModel } from "@/lib/voice/models";
 import { refreshLiveCalls } from "@/lib/calls/live";
 import { saveCrmHookSecret, saveCrmKey } from "@/lib/crm/erikscrm";
 
-export type ActionState = { error?: string; ok?: string };
+export type ActionState = { error?: string; ok?: string; password?: string };
+
+/** The admin sees the temporary password once, in case the email did not arrive. */
+function passwordState(res: Extract<MemberResult, { ok: true }>, sent: string): ActionState {
+  if (!res.tempPassword) return { ok: res.emailed ? sent : "בוצע (המייל לא נשלח)" };
+  return {
+    ok: res.emailed ? `${sent} הסיסמה הזמנית, אם צריך למסור אותה ידנית:` : "המייל לא נשלח (בודקים את Utobo). מוסרים למשתמש את הסיסמה הזמנית:",
+    password: res.tempPassword,
+  };
+}
 
 export async function inviteAction(_: ActionState, form: FormData): Promise<ActionState> {
   await requireAdmin();
@@ -21,7 +30,24 @@ export async function inviteAction(_: ActionState, form: FormData): Promise<Acti
   const res = await inviteMember(clientId, email);
   if (!res.ok) return { error: res.error };
   revalidatePath(`/admin/clients/${clientId}`);
-  return { ok: "ההזמנה נשלחה" };
+  if (!res.tempPassword) return { ok: "המשתמש כבר קיים במערכת, ונוסף ללקוח הזה" };
+  return passwordState(res, "נשלח מייל בעברית עם סיסמה זמנית.");
+}
+
+/** Reset / remove / delete one user of a client. */
+export async function memberAction(_: ActionState, form: FormData): Promise<ActionState> {
+  await requireAdmin();
+  const clientId = String(form.get("client_id"));
+  const userId = String(form.get("user_id"));
+  if (!/^[0-9a-f-]{36}$/i.test(userId)) return { error: "משתמש לא תקין" };
+  const op = String(form.get("op"));
+  const res =
+    op === "reset" ? await resetMemberPassword(userId) : op === "remove" ? await removeMember(clientId, userId) : op === "delete" ? await deleteUser(userId) : null;
+  if (!res) return { error: "פעולה לא מוכרת" };
+  if (!res.ok) return { error: res.error };
+  revalidatePath(`/admin/clients/${clientId}`);
+  if (op === "reset") return passwordState(res, "נשלחה סיסמה זמנית חדשה במייל.");
+  return { ok: op === "remove" ? "הוסר מהלקוח" : "המשתמש נמחק" };
 }
 
 /** Full delete, after the admin typed the client's name. */

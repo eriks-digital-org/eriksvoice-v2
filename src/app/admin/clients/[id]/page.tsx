@@ -7,7 +7,7 @@ import { ClientStatusBadge } from "@/components/ds/StatusBadge";
 import { requireAdmin } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { AgentRow, ClientRow, PhoneRow } from "@/lib/data/types";
-import { DeleteClientForm, InviteForm } from "./ClientForms";
+import { DeleteClientForm, InviteForm, MemberRow } from "./ClientForms";
 import { connectionStatusAction, flowUrlAction, resyncAction, setStatusAction } from "./actions";
 import { CONNECTIONS } from "@/lib/connections";
 import { ConnBadge, type ConnStatus } from "@/components/ds/StatusBadge";
@@ -136,15 +136,10 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
           />
         </Panel>
 
-        <Panel title="משתמשים והזמנות">
+        <Panel title="משתמשים" subtitle="משתמש חדש מקבל במייל סיסמה זמנית, ובכניסה הראשונה בוחר סיסמה קבועה.">
           <ul className="mb-4 divide-y divide-border">
             {memberList.map((m) => (
-              <li key={m.user_id} className="flex min-h-12 items-center justify-between gap-3 text-[16px]">
-                <span className="truncate text-ink">{m.profiles?.full_name || m.profiles?.email}</span>
-                <span dir="ltr" className="truncate text-[14px] text-ink-muted">
-                  {m.profiles?.email}
-                </span>
-              </li>
+              <MemberRow key={m.user_id} clientId={client.id} userId={m.user_id} name={m.profiles?.full_name ?? ""} email={m.profiles?.email ?? ""} />
             ))}
             {memberList.length === 0 && <li className="py-2 text-[16px] text-ink-muted">עוד אין משתמשים ללקוח.</li>}
           </ul>

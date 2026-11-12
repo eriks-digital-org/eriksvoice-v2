@@ -1,9 +1,9 @@
 "use server";
 
-import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/env";
+import { sendResetLink } from "@/lib/data/members";
 
 export type FormState = { error?: string; notice?: string };
 
@@ -44,12 +44,8 @@ export async function sendReset(_: FormState, form: FormData): Promise<FormState
   if (!isSupabaseConfigured) return { error: "המערכת עוד לא מחוברת למסד הנתונים." };
   const email = String(form.get("email") ?? "").trim().toLowerCase();
   if (!email) return { error: "נא למלא אימייל." };
-  const h = await headers();
-  const origin = process.env.NEXT_PUBLIC_SITE_URL || `${h.get("x-forwarded-proto") ?? "https"}://${h.get("host")}`;
-  const supabase = await createClient();
-  await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: `${origin}/auth/confirm?next=/set-password`,
-  });
+  // A Hebrew email with our own link (src/lib/data/members.ts).
+  await sendResetLink(email).catch((e) => console.error("reset link", e));
   // Same answer whether or not the address exists.
   return { notice: "אם הכתובת רשומה במערכת, נשלח אליה קישור לבחירת סיסמה חדשה." };
 }

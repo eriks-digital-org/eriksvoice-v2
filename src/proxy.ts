@@ -31,6 +31,14 @@ export async function proxy(request: NextRequest) {
   });
   const { data } = await supabase.auth.getClaims();
 
+  // A temporary password: nothing but choosing a permanent one until it is done.
+  const mustChange = Boolean((data?.claims?.app_metadata as { must_change_password?: boolean } | undefined)?.must_change_password);
+  if (mustChange && !/^\/(set-password$|auth\/|api\/|login$)/.test(pathname)) {
+    const redirect = NextResponse.redirect(new URL("/set-password", request.url));
+    for (const c of response.cookies.getAll()) redirect.cookies.set(c);
+    return redirect;
+  }
+
   if (!data?.claims && !isPublic) {
     const url = new URL("/login", request.url);
     url.searchParams.set("next", pathname + search);
