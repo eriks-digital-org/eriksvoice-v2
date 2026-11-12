@@ -48,7 +48,11 @@ export async function setStatusAction(form: FormData) {
   const status = String(form.get("status"));
   if (!["onboarding", "active", "paused"].includes(status)) return;
   await createAdminClient().from("clients").update({ status }).eq("id", clientId);
+  // Paused: numbers stop reaching the agents. Active again: they reach them again.
+  const routed = await routeClientNumbers(clientId);
+  if (!routed.ok) console.error("client status: routing", routed.error);
   revalidatePath(`/admin/clients/${clientId}`);
+  revalidatePath("/admin/clients");
 }
 
 async function clientOfAgent(agentId: string) {

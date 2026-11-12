@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { CheckCircle2, Circle } from "lucide-react";
 import { PageHeader, Panel } from "@/components/ds/primitives";
@@ -64,15 +65,24 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
         actions={
           <>
             <ClientStatusBadge status={client.status} />
+            <Link href={`/admin/clients/${client.id}/edit`} className="min-h-11 rounded-full bg-card px-4 py-2.5 text-[15px] font-medium text-ink shadow-soft">
+              עריכת פרטים
+            </Link>
             <form action={setStatusAction} className="flex gap-2">
               <input type="hidden" name="client_id" value={client.id} />
-              {client.status !== "paused" ? (
-                <button name="status" value="paused" className="min-h-11 rounded-full bg-card px-4 text-[15px] font-medium text-ink shadow-soft">
-                  השהיה
+              {client.status !== "active" && (
+                <button name="status" value="active" className="min-h-11 rounded-full bg-ink px-4 text-[15px] font-medium text-white">
+                  {client.status === "paused" ? "הפעלה מחדש" : "הפעלת הלקוח"}
                 </button>
-              ) : (
-                <button name="status" value="active" className="min-h-11 rounded-full bg-card px-4 text-[15px] font-medium text-ink shadow-soft">
-                  הפעלה מחדש
+              )}
+              {client.status !== "paused" && (
+                <button
+                  name="status"
+                  value="paused"
+                  title="המספרים מפסיקים לענות, והחיוג והאוטומציות נעצרים. הכל חוזר בהפעלה מחדש."
+                  className="min-h-11 rounded-full bg-card px-4 text-[15px] font-medium text-ink shadow-soft"
+                >
+                  השהיה
                 </button>
               )}
             </form>
