@@ -84,7 +84,10 @@ export async function crmFetch<T>(
   const res = await fetch(`${base}${path}`, {
     method,
     headers: {
+      // The document says "Authorization: Bearer"; the CRM's builder also named "x-api-key".
+      // Both carry the same key, so either way the function finds it.
       Authorization: `Bearer ${key}`,
+      "x-api-key": key,
       ...(init.body !== undefined ? { "Content-Type": "application/json" } : {}),
       ...(method !== "GET" ? { "Idempotency-Key": init.idempotencyKey ?? crypto.randomUUID() } : {}),
     },

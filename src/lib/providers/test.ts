@@ -49,6 +49,8 @@ export async function testProvider(key: ProviderDef["key"], adminEmail?: string)
     case "erikscrm": {
       const url = (await getSecret("erikscrm_base_url"))?.replace(/\/+$/, "");
       if (!url) return { ok: false, message: "אין כתובת" };
+      const health = await get(`${url}/health`, {});
+      if (health?.ok && (health.headers.get("content-type") ?? "").includes("json")) return { ok: true, message: "ה־API באוויר. את המפתח של כל עסק מזינים בדף הלקוח" };
       // Without a key the API answers 401 in JSON; a website answers HTML.
       const r = await get(`${url}/statuses`, {});
       if (!r) return { ok: false, message: "הכתובת לא הגיבה" };
