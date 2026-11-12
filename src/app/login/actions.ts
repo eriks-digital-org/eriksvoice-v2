@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/env";
 import { sendResetLink } from "@/lib/data/members";
+import { homeForUser } from "@/lib/auth";
 
 export type FormState = { error?: string; notice?: string };
 
@@ -31,13 +32,17 @@ export async function signIn(_: FormState, form: FormData): Promise<FormState> {
   if (!email || !password) return { error: "נא למלא אימייל וסיסמה." };
 
   const supabase = await createClient();
-  const { error } = await supabase.auth.signInWithPassword({ email, password });
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
   if (error) {
     console.error("sign-in failed", error.status, error.code, error.message);
     return { error: signInMessage(error) };
   }
+  // A temporary password: straight to choosing a permanent one.
+  if (data.user?.app_metadata?.must_change_password) redirect("/set-password");
+  // Straight to the right page (an action's redirect is an in-app navigation, so it
+  // must land on a page, not on the /auth/continue route handler).
   const next = safeNext(form.get("next"));
-  redirect(`/auth/continue${next ? `?next=${encodeURIComponent(next)}` : ""}`);
+  redirect(next && next !== "/login" ? next : await homeForUser(data.user.id, data.user.email ?? email));
 }
 
 export async function sendReset(_: FormState, form: FormData): Promise<FormState> {

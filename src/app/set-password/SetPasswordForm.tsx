@@ -14,25 +14,27 @@ import { changePasswordAction } from "./actions";
  * src/proxy.ts), or after a reset link. The link opens a session (/auth/confirm), or
  * brings it in the address fragment (#access_token=…); all end here.
  */
-export function SetPasswordForm() {
-  const [ready, setReady] = useState<"checking" | "ok" | "no-session">("checking");
+export function SetPasswordForm({ signedIn }: { signedIn: boolean }) {
+  const [ready, setReady] = useState<"checking" | "ok" | "no-session">(signedIn ? "ok" : "checking");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
+    if (signedIn) return;
+    // Only an old-style link brings the session in the address (#access_token=…).
+    const hash = new URLSearchParams(window.location.hash.slice(1));
+    const access_token = hash.get("access_token");
+    const refresh_token = hash.get("refresh_token");
     const supabase = createClient();
     (async () => {
-      const hash = new URLSearchParams(window.location.hash.slice(1));
-      const access_token = hash.get("access_token");
-      const refresh_token = hash.get("refresh_token");
-      if (access_token && refresh_token) {
-        await supabase.auth.setSession({ access_token, refresh_token });
-        history.replaceState(null, "", window.location.pathname);
-      }
-      const { data } = await supabase.auth.getUser();
-      setReady(data.user ? "ok" : "no-session");
+      if (!access_token || !refresh_token) return setReady("no-session");
+      const { error } = await supabase.auth.setSession({ access_token, refresh_token });
+      history.replaceState(null, "", window.location.pathname);
+      // From here the server owns the session; a refresh in this tab would race it.
+      await supabase.auth.stopAutoRefresh();
+      setReady(error ? "no-session" : "ok");
     })();
-  }, []);
+  }, [signedIn]);
 
   async function submit(form: FormData) {
     const password = String(form.get("password") ?? "");
@@ -41,14 +43,10 @@ export function SetPasswordForm() {
     if (password.length < 8) return setError("הסיסמה צריכה להכיל לפחות 8 תווים.");
     if (password !== again) return setError("הסיסמאות לא זהות.");
     setBusy(true);
+    // On success the action redirects to the user's home.
     const { error } = await changePasswordAction(password);
-    if (error) {
-      setBusy(false);
-      return setError(error);
-    }
-    // A route handler (not a page): a full navigation is intended.
-    // eslint-disable-next-line @next/next/no-location-assign-relative-destination
-    window.location.assign("/auth/continue");
+    setBusy(false);
+    if (error) setError(error);
   }
 
   if (ready === "checking") return <p className="text-[17px] text-ink-muted">רגע…</p>;
