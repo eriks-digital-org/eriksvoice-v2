@@ -30,6 +30,9 @@ export function SetPasswordForm() {
         history.replaceState(null, "", window.location.pathname);
       }
       const { data } = await supabase.auth.getUser();
+      // From here the server owns the session (it refreshes it after saving); a refresh
+      // in this tab with the old token would sign the user out.
+      await supabase.auth.stopAutoRefresh();
       setReady(data.user ? "ok" : "no-session");
     })();
   }, []);
@@ -41,14 +44,10 @@ export function SetPasswordForm() {
     if (password.length < 8) return setError("הסיסמה צריכה להכיל לפחות 8 תווים.");
     if (password !== again) return setError("הסיסמאות לא זהות.");
     setBusy(true);
+    // On success the action redirects to the user's home.
     const { error } = await changePasswordAction(password);
-    if (error) {
-      setBusy(false);
-      return setError(error);
-    }
-    // A route handler (not a page): a full navigation is intended.
-    // eslint-disable-next-line @next/next/no-location-assign-relative-destination
-    window.location.assign("/auth/continue");
+    setBusy(false);
+    if (error) setError(error);
   }
 
   if (ready === "checking") return <p className="text-[17px] text-ink-muted">רגע…</p>;

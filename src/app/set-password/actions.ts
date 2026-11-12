@@ -1,12 +1,15 @@
 "use server";
 
+import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getAccess, homeFor } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 /**
  * Saves the user's own password (after a temporary one, an invitation or a reset link)
  * and ends the "must change password" state, then refreshes the session so the new
- * token no longer carries it.
+ * token no longer carries it, and goes straight to the user's home (no extra hop
+ * through /auth/continue, which raced the browser's own session refresh).
  */
 export async function changePasswordAction(password: string): Promise<{ error?: string }> {
   if (password.length < 8) return { error: "הסיסמה צריכה להכיל לפחות 8 תווים." };
@@ -22,7 +25,9 @@ export async function changePasswordAction(password: string): Promise<{ error?: 
   }
   if (data.user.app_metadata?.must_change_password) {
     await createAdminClient().auth.admin.updateUserById(data.user.id, { app_metadata: { must_change_password: false } });
-    await supabase.auth.refreshSession();
+    const { error: refreshError } = await supabase.auth.refreshSession();
+    if (refreshError) console.error("set-password: refresh", refreshError.code, refreshError.message);
   }
-  return {};
+  const access = await getAccess();
+  redirect((access && homeFor(access)) || "/login?error=no-access");
 }
