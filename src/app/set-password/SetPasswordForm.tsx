@@ -7,11 +7,12 @@ import { Field } from "@/components/ds/kit";
 import { authInputCls } from "@/components/auth/AuthCard";
 import { SubmitButton } from "@/components/auth/SubmitButton";
 import { createClient } from "@/lib/supabase/client";
+import { changePasswordAction } from "./actions";
 
 /**
- * Choose a password after an invitation or a reset link. The link opens a session
- * (/auth/confirm), or brings it in the address fragment (#access_token=…) when the
- * email uses Supabase's default template; both end here.
+ * Choose a password: at the first sign-in with a temporary password (required, see
+ * src/proxy.ts), or after a reset link. The link opens a session (/auth/confirm), or
+ * brings it in the address fragment (#access_token=…); all end here.
  */
 export function SetPasswordForm() {
   const [ready, setReady] = useState<"checking" | "ok" | "no-session">("checking");
@@ -40,10 +41,10 @@ export function SetPasswordForm() {
     if (password.length < 8) return setError("הסיסמה צריכה להכיל לפחות 8 תווים.");
     if (password !== again) return setError("הסיסמאות לא זהות.");
     setBusy(true);
-    const { error } = await createClient().auth.updateUser({ password });
+    const { error } = await changePasswordAction(password);
     if (error) {
       setBusy(false);
-      return setError(error.code === "same_password" ? "זו הסיסמה הקיימת. בחרו סיסמה אחרת." : "השמירה נכשלה. נסו שוב.");
+      return setError(error);
     }
     // A route handler (not a page): a full navigation is intended.
     // eslint-disable-next-line @next/next/no-location-assign-relative-destination
