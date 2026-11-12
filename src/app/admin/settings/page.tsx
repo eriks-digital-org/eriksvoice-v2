@@ -13,7 +13,11 @@ export const metadata: Metadata = { title: "הגדרות" };
 export default async function SettingsPage() {
   await requireAdmin();
   const info = await describeSecrets();
-  const { data } = await createAdminClient().from("system_settings").select("*").eq("id", true).maybeSingle();
+  const db = createAdminClient();
+  const [{ data }, { count: words }] = await Promise.all([
+    db.from("system_settings").select("*").eq("id", true).maybeSingle(),
+    db.from("pronunciation_rules").select("id", { count: "exact", head: true }).eq("enabled", true),
+  ]);
   return (
     <div className="flex flex-col gap-6 sm:gap-8">
       <PageHeader title="הגדרות" description="כללים שמשותפים לכל המערכת." />
@@ -34,6 +38,20 @@ export default async function SettingsPage() {
             </li>
           ))}
         </ul>
+      </Panel>
+      <Panel
+        title="מילון הגייה"
+        subtitle="איך הקול אומר מילים לועזיות וראשי תיבות. משותף לכל הסוכנים."
+        action={
+          <Link href="/admin/settings/pronunciation" className="min-h-10 rounded-full bg-ink px-4 py-2 text-[14px] font-medium text-white">
+            עריכה
+          </Link>
+        }
+      >
+        <p className="text-[16px] text-ink">
+          {words ?? 0} מילים פעילות
+          {!data?.pronunciation_dict_id && (words ?? 0) > 0 && <span className="text-ink-muted"> · יישלח לשירות הקול בעדכון הסוכנים הבא</span>}
+        </p>
       </Panel>
       <SettingsForm
         safety={data?.safety_rules ?? ""}
