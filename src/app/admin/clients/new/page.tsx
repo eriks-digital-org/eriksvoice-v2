@@ -8,12 +8,13 @@ export const metadata: Metadata = { title: "לקוח חדש" };
 
 export default async function NewClientPage() {
   await requireAdmin();
-  const { data } = await createAdminClient().from("agent_types").select("key, purpose");
+  const { data } = await createAdminClient().from("agent_types").select("key, name, purpose");
   const purposes = Object.fromEntries((data ?? []).map((r) => [r.key, r.purpose]));
+  const names = Object.fromEntries((data ?? []).filter((r) => r.name?.trim()).map((r) => [r.key, r.name.trim()]));
   return (
     <div className="flex flex-col gap-6 sm:gap-8">
       <PageHeader title="לקוח חדש" soft="בשלושה צעדים." description="פרטי העסק, אילו סוכנים ליצור, ומספר טלפון אם כבר יש." />
-      <Wizard purposes={purposes} />
+      <Wizard purposes={purposes} names={names} />
     </div>
   );
 }

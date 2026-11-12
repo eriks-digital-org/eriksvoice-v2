@@ -7,7 +7,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { Field } from "@/components/ds/kit";
 import { AgentStatusBadge, Pill } from "@/components/ds/StatusBadge";
 import { characterForType } from "@/components/agents/characters";
-import { agentTypeLabels } from "@/lib/agent-types";
 import type { AgentRow } from "@/lib/data/types";
 import { cn } from "@/lib/utils";
 import { REALTIME_MODELS } from "@/lib/voice/models";
@@ -17,9 +16,11 @@ const selectCls = "h-12 w-full rounded-2xl border border-input bg-card px-3 text
 
 export function AgentAdminCard({
   agent,
+  typeName,
   voices,
   llms,
 }: {
+  typeName: string;
   agent: AgentRow & { provider_agent_id?: string | null };
   voices: { id: string; name: string }[];
   llms: string[];
@@ -39,7 +40,7 @@ export function AgentAdminCard({
         </span>
         <span className="min-w-0 flex-1">
           <span className="block truncate text-[17px] font-medium text-ink">{agent.name}</span>
-          <span className="block text-[14px] text-ink-muted">{agentTypeLabels[agent.type_key]}</span>
+          <span className="block text-[14px] text-ink-muted">{typeName}</span>
         </span>
         <AgentStatusBadge status={agent.status} />
       </div>

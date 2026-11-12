@@ -16,7 +16,8 @@ const STEP_OF_FIELD: Record<string, number> = {
   member_email: 0, member_name: 0, monthly_minutes: 0, types: 1, phone: 2, inbound_type: 2,
 };
 
-export function Wizard({ purposes }: { purposes: Record<string, string> }) {
+export function Wizard({ purposes, names }: { purposes: Record<string, string>; names: Record<string, string> }) {
+  const label = (t: AgentTypeKey) => names[t] ?? agentTypeLabels[t];
   const [step, setStep] = useState(0);
   const [types, setTypes] = useState<AgentTypeKey[]>(["leads", "sales", "service", "support"]);
   const [inbound, setInbound] = useState<string>("service");
@@ -109,7 +110,7 @@ export function Wizard({ purposes }: { purposes: Record<string, string> }) {
                   <img src={c.smile} alt="" className="size-14 object-contain" />
                 </span>
                 <span className="min-w-0 flex-1">
-                  <span className="block text-[17px] font-medium text-ink">{agentTypeLabels[t]}</span>
+                  <span className="block text-[17px] font-medium text-ink">{label(t)}</span>
                   <span className="block text-[14px] text-ink-muted">{purposes[t]}</span>
                 </span>
                 <span className={cn("grid size-7 place-items-center rounded-full", on ? "bg-ink text-cta-dot" : "bg-white text-transparent")}>
@@ -134,7 +135,7 @@ export function Wizard({ purposes }: { purposes: Record<string, string> }) {
           >
             {types.map((t) => (
               <option key={t} value={t}>
-                {agentTypeLabels[t]}
+                {label(t)}
               </option>
             ))}
           </select>

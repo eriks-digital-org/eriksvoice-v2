@@ -6,18 +6,19 @@ import { Textarea } from "@/components/ui/textarea";
 import { Field } from "@/components/ds/kit";
 import { AgentStatusBadge } from "@/components/ds/StatusBadge";
 import { characterForType } from "@/components/agents/characters";
-import { agentTypeLabels } from "@/lib/agent-types";
 import type { AgentRow } from "@/lib/data/types";
 import { VoiceChoice } from "@/components/voice/VoiceChoice";
 import { saveAgent, type SaveState } from "./actions";
 
 export function AgentCard({
   agent,
+  typeName,
   slug,
   phone,
   voices,
 }: {
   agent: AgentRow;
+  typeName: string;
   slug: string;
   phone?: string;
   voices: { id: string; name: string; preview?: string | null; gender?: string }[];
@@ -36,7 +37,7 @@ export function AgentCard({
         <div className="min-w-0 flex-1">
           <h2 className="truncate text-[22px] font-medium text-ink">{agent.name}</h2>
           <p className="text-[15px] text-ink-muted">
-            {agentTypeLabels[agent.type_key]}
+            {typeName}
             {phone && (
               <>
                 {" · "}

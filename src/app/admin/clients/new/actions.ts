@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { requireAdmin } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { agentTypeNames } from "@/lib/data/agent-type-names";
 import { AGENT_TYPE_KEYS, agentTypeLabels, type AgentTypeKey } from "@/lib/agent-types";
 import { inviteMember } from "@/lib/data/members";
 
@@ -92,9 +93,10 @@ export async function createClientAction(_: WizardState, form: FormData): Promis
   const types = [...new Set(v.types)];
   let agents: { id: string; type_key: string }[] = [];
   if (types.length) {
+    const typeNames = await agentTypeNames();
     const { data, error: e } = await db
       .from("agents")
-      .insert(types.map((t) => ({ client_id: client.id, type_key: t, name: agentTypeLabels[t] })))
+      .insert(types.map((t) => ({ client_id: client.id, type_key: t, name: typeNames[t] ?? agentTypeLabels[t] })))
       .select("id, type_key");
     if (e) return undo("יצירת הסוכנים נכשלה");
     agents = data ?? [];

@@ -74,10 +74,15 @@ export async function saveAgentType(_: SaveState, form: FormData): Promise<SaveS
     }).filter(([, v]) => v !== undefined),
   );
 
+  const name = String(form.get("name") ?? "").trim();
+  if (!name) return { error: "צריך שם לסוג הסוכן" };
+  const { data: before } = await db.from("agent_types").select("name").eq("key", key).maybeSingle();
+  const oldName = (before?.name as string | undefined)?.trim() ?? "";
+
   const { error } = await db
     .from("agent_types")
     .update({
-      name: String(form.get("name") ?? "").trim(),
+      name,
       purpose: String(form.get("purpose") ?? "").trim(),
       prompt,
       llm_model: String(form.get("llm_model") ?? "").trim(),
@@ -93,10 +98,18 @@ export async function saveAgentType(_: SaveState, form: FormData): Promise<SaveS
     .eq("key", key);
   if (error) return { error: "השמירה נכשלה" };
 
+  // Agents that still carry the type's name (the default from when they were created)
+  // take the new one. An agent the client or admin named differently keeps its name.
+  if (oldName && oldName !== name) {
+    await db.from("agents").update({ name }).eq("type_key", key).eq("name", oldName);
+  }
+
   // Goes live at once for every active agent of this type, at every client.
   const { failed } = await syncType(key);
   revalidatePath("/admin/agents");
   revalidatePath(`/admin/agents/${key}`);
+  revalidatePath("/admin/clients", "layout");
+  revalidatePath("/[slug]", "layout");
   return failed
     ? { ok: `נשמר, אבל העדכון נכשל אצל ${failed} לקוחות. הפרטים במסך הלקוח.` }
     : { ok: "נשמר ועודכן אצל כל הסוכנים מהסוג הזה" };
