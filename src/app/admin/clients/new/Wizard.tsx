@@ -13,7 +13,7 @@ import { createClientAction, type WizardState } from "./actions";
 const STEPS = ["פרטי העסק", "סוכנים", "מספר טלפון"];
 const STEP_OF_FIELD: Record<string, number> = {
   name: 0, slug: 0, industry: 0, address: 0, hours: 0, contact_phone: 0, notify_email: 0, description: 0,
-  member_email: 0, monthly_minutes: 0, types: 1, phone: 2, inbound_type: 2,
+  member_email: 0, member_name: 0, monthly_minutes: 0, types: 1, phone: 2, inbound_type: 2,
 };
 
 export function Wizard({ purposes }: { purposes: Record<string, string> }) {
@@ -78,7 +78,10 @@ export function Wizard({ purposes }: { purposes: Record<string, string> }) {
         <Field label="מכסת דקות חודשית">
           <Input name="monthly_minutes" type="number" min={0} defaultValue={500} dir="ltr" className={cn(input, "text-end")} />
         </Field>
-        <Field label="מייל של משתמש הלקוח" hint="נשלחת אליו הזמנה לבחירת סיסמה" className="sm:col-span-2">
+        <Field label="שם משתמש הלקוח" hint="יופיע לו ״שלום [שם]״ במערכת">
+          <Input name="member_name" className={input} />
+        </Field>
+        <Field label="מייל של משתמש הלקוח" hint="נשלחת אליו סיסמה זמנית במייל">
           <Input name="member_email" type="email" dir="ltr" className={cn(input, "text-end")} />
         </Field>
         <Field label="תיאור כללי של העסק" hint="נכנס לפרומפט של הסוכנים, ונוצר גם כפריט ראשון במאגר הידע" className="sm:col-span-2">

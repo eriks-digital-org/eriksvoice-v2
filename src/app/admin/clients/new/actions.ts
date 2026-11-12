@@ -30,6 +30,7 @@ const schema = z.object({
   notify_email: z.union([z.literal(""), z.email("מייל להתראות לא תקין")]),
   description: z.string().trim().max(5000),
   member_email: z.union([z.literal(""), z.email("המייל של משתמש הלקוח לא תקין")]),
+  member_name: z.string().trim().max(120),
   monthly_minutes: z.coerce.number().int().min(0).max(1_000_000),
   types: z.array(z.enum(AGENT_TYPE_KEYS as [AgentTypeKey, ...AgentTypeKey[]])),
   phone: z.union([z.literal(""), z.string().regex(/^\+[1-9][0-9]{6,14}$/, "מספר טלפון בפורמט בינלאומי, למשל +972501234567")]),
@@ -48,6 +49,7 @@ export async function createClientAction(_: WizardState, form: FormData): Promis
     notify_email: String(form.get("notify_email") ?? "").trim(),
     description: form.get("description") ?? "",
     member_email: String(form.get("member_email") ?? "").trim().toLowerCase(),
+    member_name: form.get("member_name") ?? "",
     monthly_minutes: form.get("monthly_minutes") || 0,
     types: form.getAll("types"),
     phone: String(form.get("phone") ?? "").replace(/[\s-]/g, ""),
@@ -58,6 +60,7 @@ export async function createClientAction(_: WizardState, form: FormData): Promis
     return { error: issue?.message ?? "יש שדה לא תקין", field: String(issue?.path[0] ?? "") };
   }
   const v = parsed.data;
+  if (v.member_email && v.member_name.length < 2) return { error: "צריך גם שם מלא למשתמש הלקוח", field: "member_name" };
   const db = createAdminClient();
 
   const { data: client, error } = await db
@@ -111,7 +114,7 @@ export async function createClientAction(_: WizardState, form: FormData): Promis
   }
 
   if (v.member_email) {
-    const invited = await inviteMember(client.id, v.member_email);
+    const invited = await inviteMember(client.id, v.member_email, v.member_name);
     if (!invited.ok) return undo(invited.error);
   }
 

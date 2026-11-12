@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireAdmin } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { deleteUser, inviteMember, removeMember, resetMemberPassword, type MemberResult } from "@/lib/data/members";
+import { deleteUser, inviteMember, removeMember, renameMember, resetMemberPassword, type MemberResult } from "@/lib/data/members";
 import { activateAgent, pauseAgent, removeClientFromProvider, syncClient } from "@/lib/agents/sync";
 import { callOut, releaseNumber, routeClientNumbers } from "@/lib/agents/phones";
 import { isRealtimeModel } from "@/lib/voice/models";
@@ -26,8 +26,10 @@ export async function inviteAction(_: ActionState, form: FormData): Promise<Acti
   await requireAdmin();
   const clientId = String(form.get("client_id"));
   const email = String(form.get("email") ?? "").trim().toLowerCase();
+  const name = String(form.get("full_name") ?? "").trim();
+  if (name.length < 2) return { error: "צריך שם מלא למשתמש" };
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { error: "מייל לא תקין" };
-  const res = await inviteMember(clientId, email);
+  const res = await inviteMember(clientId, email, name);
   if (!res.ok) return { error: res.error };
   revalidatePath(`/admin/clients/${clientId}`);
   if (!res.tempPassword) return { ok: "המשתמש כבר קיים במערכת, ונוסף ללקוח הזה" };
@@ -42,12 +44,14 @@ export async function memberAction(_: ActionState, form: FormData): Promise<Acti
   if (!/^[0-9a-f-]{36}$/i.test(userId)) return { error: "משתמש לא תקין" };
   const op = String(form.get("op"));
   const res =
-    op === "reset" ? await resetMemberPassword(userId) : op === "remove" ? await removeMember(clientId, userId) : op === "delete" ? await deleteUser(userId) : null;
+    op === "rename"
+      ? await renameMember(userId, String(form.get("full_name") ?? ""))
+      : op === "reset" ? await resetMemberPassword(userId) : op === "remove" ? await removeMember(clientId, userId) : op === "delete" ? await deleteUser(userId) : null;
   if (!res) return { error: "פעולה לא מוכרת" };
   if (!res.ok) return { error: res.error };
   revalidatePath(`/admin/clients/${clientId}`);
   if (op === "reset") return passwordState(res, "נשלחה סיסמה זמנית חדשה במייל.");
-  return { ok: op === "remove" ? "הוסר מהלקוח" : "המשתמש נמחק" };
+  return { ok: op === "rename" ? "השם נשמר" : op === "remove" ? "הוסר מהלקוח" : "המשתמש נמחק" };
 }
 
 /** Full delete, after the admin typed the client's name. */
