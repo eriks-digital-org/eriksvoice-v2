@@ -7,6 +7,7 @@ import type { AllowedVoice } from "@/lib/voice/models";
 import { routeClientNumbers } from "./phones";
 import { isRealtimeModel } from "@/lib/voice/models";
 import { CALLBACK_FIELDS } from "@/lib/calls/callback-time";
+import { ensurePronunciationDictionary } from "@/lib/voice/pronunciation";
 
 type Db = ReturnType<typeof createAdminClient>;
 
@@ -74,7 +75,13 @@ interface Peer {
   active: boolean;
 }
 
-async function pushAgent(db: Db, agent: AgentFull, knowledge: Awaited<ReturnType<typeof syncKnowledge>>, peers: Peer[]) {
+async function pushAgent(
+  db: Db,
+  agent: AgentFull,
+  knowledge: Awaited<ReturnType<typeof syncKnowledge>>,
+  peers: Peer[],
+  pronunciation: voice.PronunciationLocator | null,
+) {
   const [{ data: type }, { data: settings }, { data: client }, { data: others }, { data: automations }] = await Promise.all([
     db.from("agent_types").select("*").eq("key", agent.type_key).single(),
     db.from("system_settings").select("safety_rules").eq("id", true).single(),
@@ -142,6 +149,7 @@ async function pushAgent(db: Db, agent: AgentFull, knowledge: Awaited<ReturnType
     tags: [`client:${client.slug}`, `type:${agent.type_key}`],
     transfers,
     dataCollection: CALLBACK_FIELDS,
+    pronunciation,
   };
 
   // If the provider rejects the hand-over or the call-back settings, the agent is still
@@ -152,6 +160,12 @@ async function pushAgent(db: Db, agent: AgentFull, knowledge: Awaited<ReturnType
       return await fn(config);
     } catch (e) {
       if (!rejected(e)) throw e;
+      // A rejected pronunciation dictionary must not keep the agent from being saved.
+      if (config.pronunciation && /pronunciation/i.test((e as Error).message)) {
+        console.error("sync: retrying without pronunciation dictionary", (e as Error).message);
+        config.pronunciation = null;
+        return send(fn);
+      }
       console.error("sync: retrying without transfer tool", (e as Error).message);
       try {
         return await fn({ ...config, transfers: [], omitTransferTool: true });
@@ -200,6 +214,7 @@ export async function syncClient(clientId: string): Promise<SyncResult> {
     return { ok: false, error: message(e) };
   }
   const { data: types } = await db.from("agent_types").select("key, name, purpose, realtime_model");
+  const pronunciation = await ensurePronunciationDictionary(db);
   const peers: Peer[] = agents.map((a) => {
     const t = (types ?? []).find((x) => x.key === a.type_key);
     return {
@@ -218,7 +233,7 @@ export async function syncClient(clientId: string): Promise<SyncResult> {
     let created = false;
     for (const agent of agents) {
       try {
-        if (await pushAgent(db, agent, knowledge, peers)) {
+        if (await pushAgent(db, agent, knowledge, peers, pronunciation)) {
           created = true;
           const p = peers.find((x) => x.id === agent.id);
           if (p) p.providerId = agent.provider_agent_id;

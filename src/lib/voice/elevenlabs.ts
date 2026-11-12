@@ -195,6 +195,13 @@ export interface AgentConfig {
   omitTransferTool?: boolean;
   /** Fields the provider extracts from every call's transcript after it ends (analysis). */
   dataCollection?: Record<string, { type: "string" | "boolean" | "integer" | "number"; description: string }>;
+  /** The shared pronunciation dictionary (Admin → Settings → Pronunciation), or null. */
+  pronunciation?: PronunciationLocator | null;
+}
+
+export interface PronunciationLocator {
+  pronunciation_dictionary_id: string;
+  version_id: string;
 }
 
 function body(c: AgentConfig) {
@@ -232,6 +239,7 @@ function body(c: AgentConfig) {
   else if (c.llm) prompt.llm = c.llm;
   const tts: Record<string, unknown> = { ...(c.realtimeModel ? {} : { model_id: c.ttsModel }), ...c.voiceSettings };
   if (c.voiceId) tts.voice_id = c.voiceId;
+  if (c.pronunciation) tts.pronunciation_dictionary_locators = [c.pronunciation];
   return {
     name: c.name,
     tags: c.tags,
@@ -259,6 +267,26 @@ export async function deleteAgent(id: string): Promise<void> {
   } catch (e) {
     if (!(e instanceof VoiceProviderError && e.status === 404)) throw e;
   }
+}
+
+/** Creates a pronunciation dictionary of alias rules ("say `alias` where the text has `string_to_replace`"). */
+export async function createPronunciationDictionary(
+  name: string,
+  rules: { string_to_replace: string; alias: string }[],
+): Promise<PronunciationLocator> {
+  const r = await call<{ id: string; version_id: string }>("/v1/pronunciation-dictionaries/add-from-rules", {
+    method: "POST",
+    body: JSON.stringify({ name, rules: rules.map((x) => ({ type: "alias", ...x })) }),
+  });
+  return { pronunciation_dictionary_id: r.id, version_id: r.version_id };
+}
+
+/** Best effort: hides an old dictionary at the provider. */
+export async function archivePronunciationDictionary(id: string): Promise<void> {
+  await call(`/v1/pronunciation-dictionaries/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    body: JSON.stringify({ archived: true }),
+  }).catch(() => undefined);
 }
 
 export async function createKnowledgeText(name: string, text: string): Promise<string> {
