@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { emit } from "@/lib/automations/engine";
 import { emitNewLeads } from "@/lib/automations/leads";
 import { toE164 } from "@/lib/phone";
+import { rateOk } from "@/lib/security/rate";
 
 /**
  * A client's incoming webhook: https://eriksvoice.co.il/api/public/hooks/<token>.
@@ -16,6 +17,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ token: 
   const db = createAdminClient();
   const { data: client } = await db.from("clients").select("id").eq("inbound_token", token).maybeSingle();
   if (!client) return NextResponse.json({ error: "not found" }, { status: 404 });
+  if (!(await rateOk(`hook:${client.id}`, 120, 60))) return NextResponse.json({ error: "too many" }, { status: 429 });
 
   let data: Record<string, unknown> = {};
   const raw = await req.text();

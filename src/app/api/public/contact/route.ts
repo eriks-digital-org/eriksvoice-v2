@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { notify } from "@/lib/notify";
 import { toE164 } from "@/lib/phone";
+import { clientIp, rateOk } from "@/lib/security/rate";
 
 const TOPICS: Record<string, string> = {
   campaigns: "קמפיינים ממומנים",
@@ -12,6 +13,8 @@ const TOPICS: Record<string, string> = {
 
 /** The landing page's "contact us" form: a notification (and email) to the admin. */
 export async function POST(req: Request) {
+  // A person sends a few; a bot sends hundreds.
+  if (!(await rateOk(`contact:${clientIp(req)}`, 5, 600))) return NextResponse.json({ error: "too many" }, { status: 429 });
   let d: Record<string, unknown>;
   try {
     d = (await req.json()) as Record<string, unknown>;

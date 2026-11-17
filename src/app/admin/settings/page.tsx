@@ -16,7 +16,7 @@ export default async function SettingsPage() {
   const db = createAdminClient();
   const [{ data }, { count: words }] = await Promise.all([
     db.from("system_settings").select("*").eq("id", true).maybeSingle(),
-    db.from("pronunciation_rules").select("id", { count: "exact", head: true }).eq("enabled", true),
+    db.from("pronunciation_rules").select("id", { count: "exact", head: true }).eq("enabled", true).is("client_id", null),
   ]);
   return (
     <div className="flex flex-col gap-6 sm:gap-8">

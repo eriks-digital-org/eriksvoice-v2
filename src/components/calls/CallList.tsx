@@ -2,7 +2,7 @@ import Link from "next/link";
 import { PhoneIncoming, PhoneOutgoing, MonitorSmartphone } from "lucide-react";
 import { Pill } from "@/components/ds/StatusBadge";
 import { StateBlock } from "@/components/ds/primitives";
-import { CALLS_PAGE, directionLabel, duration, isLive, outcomeLabel, statusLabel, when, type CallListItem } from "./format";
+import { CALLS_PAGE, RESULTS, directionLabel, duration, isLive, outcomeLabel, statusLabel, when, type CallListItem } from "./format";
 
 const icon = { inbound: PhoneIncoming, outbound: PhoneOutgoing, web: MonitorSmartphone };
 
@@ -15,6 +15,7 @@ export function CallList({
   emptyText,
   hangup,
   hangupFields = {},
+  filtered = false,
 }: {
   calls: CallListItem[];
   hrefFor: (id: string) => string;
@@ -24,7 +25,10 @@ export function CallList({
   /** Server action that hangs up a live call (gets "call_id" plus hangupFields). */
   hangup?: (form: FormData) => Promise<void>;
   hangupFields?: Record<string, string>;
+  /** Filters are on: an empty list says so. */
+  filtered?: boolean;
 }) {
+  if (calls.length === 0 && page === 1 && filtered) return <StateBlock kind="empty" title="אין שיחות שמתאימות לסינון" description="משנים את הסינון או מנקים אותו." />;
   if (calls.length === 0 && page === 1) return <StateBlock kind="empty" title="עוד אין שיחות" description={emptyText} />;
   return (
     <>
@@ -54,7 +58,7 @@ export function CallList({
                   <span className="num text-[14px] text-ink-muted">{when(c.started_at)}</span>
                   <span className="num text-[14px] text-ink-muted">{duration(c.duration_secs)}</span>
                 </span>
-                <Pill tone={o.tone}>{o.label}</Pill>
+                {c.result ? <Pill tone="lime">{RESULTS[c.result]}</Pill> : <Pill tone={o.tone}>{o.label}</Pill>}
               </Link>
               {live && hangup && (
                 <form action={hangup} className="shrink-0 pe-[22px] sm:pe-8">

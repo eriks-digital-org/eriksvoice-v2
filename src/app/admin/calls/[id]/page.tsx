@@ -6,6 +6,20 @@ import { CallDetail } from "@/components/calls/CallDetail";
 import { requireAdmin } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCall } from "@/lib/calls/queries";
+import { isResult } from "@/components/calls/format";
+import { revalidatePath } from "next/cache";
+
+async function saveResult(form: FormData) {
+  "use server";
+  await requireAdmin();
+  const id = String(form.get("call_id"));
+  const r = String(form.get("result") ?? "");
+  await createAdminClient()
+    .from("calls")
+    .update({ result: isResult(r) ? r : null, result_note: String(form.get("result_note") ?? "").trim().slice(0, 300) })
+    .eq("id", id);
+  revalidatePath(`/admin/calls/${id}`);
+}
 
 export const metadata: Metadata = { title: "שיחה" };
 
@@ -29,7 +43,7 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
           )
         }
       />
-      <CallDetail call={call} />
+      <CallDetail call={call} saveResult={saveResult} />
     </div>
   );
 }

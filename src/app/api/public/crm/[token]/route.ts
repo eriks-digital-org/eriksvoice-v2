@@ -5,6 +5,7 @@ import { emit } from "@/lib/automations/engine";
 import { emitNewLeads } from "@/lib/automations/leads";
 import { crmConfig, crmHookSecret } from "@/lib/crm/erikscrm";
 import { toE164 } from "@/lib/phone";
+import { rateOk } from "@/lib/security/rate";
 
 type CrmEvent = {
   id?: string;
@@ -27,6 +28,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ token: 
   const { data: client } = await db.from("clients").select("id").eq("inbound_token", token).maybeSingle();
   if (!client) return NextResponse.json({ error: "not found" }, { status: 404 });
   const clientId = client.id as string;
+  if (!(await rateOk(`crm:${clientId}`, 300, 60))) return NextResponse.json({ error: "too many" }, { status: 429 });
 
   const raw = await req.text();
   if (raw.length > 300_000) return NextResponse.json({ error: "too large" }, { status: 413 });

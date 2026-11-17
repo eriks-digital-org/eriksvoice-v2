@@ -4,7 +4,8 @@ import { PageHeader, Panel } from "@/components/ds/primitives";
 import { CallList } from "@/components/calls/CallList";
 import { requireAdmin } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { listCalls, pageOf } from "@/lib/calls/queries";
+import { filterQuery, hasFilters, listCalls, pageOf, parseFilters } from "@/lib/calls/queries";
+import { CallFilters } from "@/components/calls/CallFilters";
 import { backfillClient } from "@/lib/calls/ingest";
 import { isVoiceConfigured } from "@/lib/voice/elevenlabs";
 import { hangupCall, refreshLiveCalls } from "@/lib/calls/live";
@@ -34,18 +35,21 @@ async function pullLatest(form: FormData) {
   revalidatePath("/admin/calls");
 }
 
-export default async function Page({ searchParams }: { searchParams: Promise<{ client?: string; page?: string }> }) {
+export default async function Page({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   await requireAdmin();
   const sp = await searchParams;
   const page = pageOf(sp.page);
   const clientId = sp.client && /^[0-9a-f-]{36}$/i.test(sp.client) ? sp.client : undefined;
+  const filters = parseFilters(sp);
   const db = createAdminClient();
   const live = await refreshLiveCalls(clientId).catch(() => 0);
-  const [{ data: clients }, calls] = await Promise.all([
+  const [{ data: clients }, calls, { data: agents }] = await Promise.all([
     db.from("clients").select("id, name").order("name"),
-    listCalls(db, { clientId, page, withClient: !clientId }),
+    listCalls(db, { clientId, page, withClient: !clientId, filters }),
+    clientId ? db.from("agents").select("id, name").eq("client_id", clientId).order("created_at") : Promise.resolve({ data: [] }),
   ]);
-  const qs = (p: number) => `/admin/calls?${new URLSearchParams({ ...(clientId ? { client: clientId } : {}), page: String(p) })}`;
+  const keep: Record<string, string> = clientId ? { client: clientId } : {};
+  const qs = (p: number) => `/admin/calls?${filterQuery(filters, { ...keep, page: p })}`;
 
   return (
     <div className="flex flex-col gap-6 sm:gap-8">
@@ -76,7 +80,9 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ c
       </form>
       {live > 0 && <AutoRefresh />}
       <Panel bodyClassName="p-0 sm:p-0">
+        <CallFilters filters={filters} agents={(agents ?? []) as { id: string; name: string }[]} basePath="/admin/calls" exportHref="/api/calls/export" hidden={keep} />
         <CallList
+          filtered={hasFilters(filters)}
           hangup={hangup}
           calls={calls}
           page={page}

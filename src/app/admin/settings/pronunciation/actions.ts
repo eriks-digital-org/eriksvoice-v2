@@ -3,14 +3,21 @@
 import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { syncAll } from "@/lib/agents/sync";
+import { syncAll, syncClient } from "@/lib/agents/sync";
 import type { PronunciationRow } from "@/lib/voice/pronunciation";
 
 export type PronunciationState = { error?: string; ok?: string; rows?: PronunciationRow[] };
 
-/** Saves the whole list, then brings every active agent up to date with it. */
+/**
+ * Saves the whole list (the shared one, or one business's words with "client_id"), then brings
+ * the agents that use it up to date.
+ */
 export async function savePronunciation(_: PronunciationState, form: FormData): Promise<PronunciationState> {
   await requireAdmin();
+  const rawClient = String(form.get("client_id") ?? "");
+  const clientId = /^[0-9a-f-]{36}$/i.test(rawClient) ? rawClient : null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const scoped = (q: any) => (clientId ? q.eq("client_id", clientId) : q.is("client_id", null));
   let rows: PronunciationRow[];
   try {
     rows = JSON.parse(String(form.get("rows") ?? "[]"));
@@ -37,18 +44,20 @@ export async function savePronunciation(_: PronunciationState, form: FormData): 
   }
 
   const db = createAdminClient();
-  const { data: existing } = await db.from("pronunciation_rules").select("id, term");
+  const { data: existing } = await scoped(db.from("pronunciation_rules").select("id, term"));
   const keep = new Set(rows.filter((r) => r.id).map((r) => r.id as string));
-  const removed = (existing ?? []).map((r) => r.id as string).filter((id) => !keep.has(id));
+  const removed = ((existing ?? []) as { id: string }[]).map((r) => r.id).filter((id) => !keep.has(id));
   if (removed.length) {
     const { error } = await db.from("pronunciation_rules").delete().in("id", removed);
     if (error) return { error: "השמירה נכשלה" };
   }
+  const before = new Map(((existing ?? []) as { id: string; term: string }[]).map((r) => [r.id, r.term]));
   const withPos = rows.map((r, i) => ({ ...r, position: i + 1 }));
-  const old = withPos.filter((r) => r.id && keep.has(r.id));
-  const fresh = withPos.filter((r) => !r.id).map((r) => ({ term: r.term, say: r.say, note: r.note, category: r.category, enabled: r.enabled, position: r.position }));
+  // Only rows of this list (an id from another list is treated as new).
+  const mine = new Set(before.keys());
+  const old = withPos.filter((r) => r.id && mine.has(r.id)).map((r) => ({ ...r, client_id: clientId }));
+  const fresh = withPos.filter((r) => !r.id || !mine.has(r.id)).map((r) => ({ term: r.term, say: r.say, note: r.note, category: r.category, enabled: r.enabled, position: r.position, client_id: clientId }));
   // Free the terms of renamed rows first, so swapping terms between rows doesn't collide.
-  const before = new Map((existing ?? []).map((r) => [r.id as string, r.term as string]));
   for (const r of old) {
     if (before.get(r.id as string) !== r.term) await db.from("pronunciation_rules").update({ term: `__${r.id}` }).eq("id", r.id as string);
   }
@@ -60,7 +69,12 @@ export async function savePronunciation(_: PronunciationState, form: FormData): 
     const { error } = await db.from("pronunciation_rules").insert(fresh);
     if (error) return { error: "השמירה נכשלה" };
   }
-  const { data: saved } = await db.from("pronunciation_rules").select("id, term, say, note, category, enabled").order("position");
+  const { data: saved } = await scoped(db.from("pronunciation_rules").select("id, term, say, note, category, enabled").order("position"));
+  if (clientId) {
+    const r = await syncClient(clientId);
+    revalidatePath(`/admin/clients/${clientId}/pronunciation`);
+    return { rows: (saved ?? []) as PronunciationRow[], ok: r.ok ? "נשמר ועודכן בסוכנים של העסק" : `נשמר, אבל העדכון נכשל: ${r.error}` };
+  }
   const { failed } = await syncAll();
   revalidatePath("/admin/settings/pronunciation");
   return { rows: (saved ?? []) as PronunciationRow[], ok: failed ? `נשמר, אבל העדכון נכשל אצל ${failed} לקוחות` : "נשמר ועודכן בכל הסוכנים הפעילים" };

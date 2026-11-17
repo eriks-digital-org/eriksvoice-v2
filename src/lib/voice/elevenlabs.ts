@@ -195,8 +195,8 @@ export interface AgentConfig {
   omitTransferTool?: boolean;
   /** Fields the provider extracts from every call's transcript after it ends (analysis). */
   dataCollection?: Record<string, { type: "string" | "boolean" | "integer" | "number"; description: string }>;
-  /** The shared pronunciation dictionary (Admin → Settings → Pronunciation), or null. */
-  pronunciation?: PronunciationLocator | null;
+  /** Pronunciation dictionaries in order (the business's own words, then the shared list). */
+  pronunciation?: PronunciationLocator[];
 }
 
 export interface PronunciationLocator {
@@ -239,7 +239,7 @@ function body(c: AgentConfig) {
   else if (c.llm) prompt.llm = c.llm;
   const tts: Record<string, unknown> = { ...(c.realtimeModel ? {} : { model_id: c.ttsModel }), ...c.voiceSettings };
   if (c.voiceId) tts.voice_id = c.voiceId;
-  if (c.pronunciation) tts.pronunciation_dictionary_locators = [c.pronunciation];
+  if (c.pronunciation?.length) tts.pronunciation_dictionary_locators = c.pronunciation;
   return {
     name: c.name,
     tags: c.tags,

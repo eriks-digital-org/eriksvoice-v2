@@ -7,6 +7,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { agentTypeNames } from "@/lib/data/agent-type-names";
 import { AGENT_TYPE_KEYS, agentTypeLabels, type AgentTypeKey } from "@/lib/agent-types";
 import { inviteMember } from "@/lib/data/members";
+import { WEEKLY_REPORT } from "@/lib/automations/catalog";
 
 export type WizardState = { error?: string; field?: string };
 
@@ -106,6 +107,9 @@ export async function createClientAction(_: WizardState, form: FormData): Promis
   if (v.description) {
     await db.from("knowledge_items").insert({ client_id: client.id, title: "על העסק", body: v.description });
   }
+
+  // Every client starts with a weekly summary by email (Sunday 09:00); they can turn it off.
+  await db.from("automations").insert({ client_id: client.id, name: WEEKLY_REPORT.name, spec: WEEKLY_REPORT.spec });
 
   if (v.phone) {
     const inbound = agents.find((a) => a.type_key === v.inbound_type) ?? null;
