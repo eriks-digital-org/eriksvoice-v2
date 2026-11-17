@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireMember } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { syncClient } from "@/lib/agents/sync";
 import { missingAgent, parseSpec } from "@/lib/automations/validate";
 
@@ -26,13 +27,15 @@ export async function saveAutomationAction(_: AutoState, form: FormData): Promis
     const { data: ag } = await db.from("agents").select("id").eq("id", parsed.spec.agent_id).eq("client_id", client.id).maybeSingle();
     if (!ag) return { error: "הסוכן לא נמצא" };
   }
+  // Writes go through here only (clients can't write the table directly), after the checks above.
+  const admin = createAdminClient();
   const { error } = id
-    ? await db
+    ? await admin
         .from("automations")
         .update({ name, spec: parsed.spec, ...(templateVersion ? { template_version: templateVersion } : {}) })
         .eq("id", id)
         .eq("client_id", client.id)
-    : await db.from("automations").insert({ client_id: client.id, name, spec: parsed.spec, template_id: templateId, template_version: templateVersion });
+    : await admin.from("automations").insert({ client_id: client.id, name, spec: parsed.spec, template_id: templateId, template_version: templateVersion });
   if (error) return { error: "השמירה נכשלה" };
   if (parsed.spec.instruction?.trim() || id) await syncClient(client.id);
   revalidatePath(`/${slug}/automations`);
@@ -46,7 +49,7 @@ export async function automationRowAction(form: FormData) {
   const id = String(form.get("id"));
   const op = String(form.get("op"));
   if (op === "delete") await db.from("automations").delete().eq("id", id).eq("client_id", client.id);
-  if (op === "on" || op === "off") await db.from("automations").update({ enabled: op === "on" }).eq("id", id).eq("client_id", client.id);
+  if (op === "on" || op === "off") await createAdminClient().from("automations").update({ enabled: op === "on" }).eq("id", id).eq("client_id", client.id);
   await syncClient(client.id);
   revalidatePath(`/${slug}/automations`);
 }
