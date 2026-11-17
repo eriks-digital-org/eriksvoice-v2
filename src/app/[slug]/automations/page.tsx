@@ -1,3 +1,4 @@
+import { publicOrigin } from "@/lib/origin";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Plus } from "lucide-react";
@@ -36,7 +37,7 @@ export default async function Page({ params }: { params: Promise<{ slug: string 
   const list = (autos ?? []) as Row[];
   const tpl = (templates ?? []) as Template[];
   const names = new Map(list.map((a) => [a.id, a.name]));
-  const site = process.env.NEXT_PUBLIC_SITE_URL ?? "https://eriksvoice.co.il";
+  const site = publicOrigin();
 
   return (
     <div className="flex flex-col gap-6 sm:gap-8">

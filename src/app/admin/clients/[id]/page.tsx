@@ -1,3 +1,4 @@
+import { publicOrigin } from "@/lib/origin";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { CheckCircle2, Circle } from "lucide-react";
@@ -46,7 +47,7 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
     db.from("clients").select("call_tools, meeting_minutes, transfer_phone, meeting_invite").eq("id", id).single(),
   ]);
   const connOf = (kind: string) => (conns ?? []).find((c) => c.kind === kind) as { status: ConnStatus; last_error: string | null; requested_at: string | null } | undefined;
-  const site = process.env.NEXT_PUBLIC_SITE_URL ?? "https://eriksvoice.co.il";
+  const site = publicOrigin();
   const agentList = (agents ?? []) as AgentRow[];
   const phoneList = (phones ?? []) as PhoneRow[];
   const [catalog, { owned, ownedError }] = await Promise.all([loadCatalog(), loadOwnedNumbers()]);

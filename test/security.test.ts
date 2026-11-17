@@ -32,3 +32,12 @@ describe("pronunciation rules", () => {
     expect(rules.find((r) => r.string_to_replace === "Lead")?.alias).toBe("ליד");
   });
 });
+
+import { publicOrigin } from "@/lib/origin";
+describe("public origin", () => {
+  it("is always https outside localhost", () => {
+    expect(publicOrigin("http://eriksvoice.co.il/")).toBe("https://eriksvoice.co.il");
+    expect(publicOrigin("https://eriksvoice.co.il")).toBe("https://eriksvoice.co.il");
+    expect(publicOrigin("http://localhost:3000")).toBe("http://localhost:3000");
+  });
+});

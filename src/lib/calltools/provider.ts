@@ -1,4 +1,5 @@
 import "server-only";
+import { publicOrigin } from "@/lib/origin";
 import { createHash } from "node:crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getSecret } from "@/lib/providers/secrets";
@@ -11,7 +12,7 @@ type Db = ReturnType<typeof createAdminClient>;
 export const TOOLS_SECRET = "elevenlabs_initiation_secret";
 export const TOOLS_HEADER = "x-eriksvoice-key";
 
-const origin = () => (process.env.NEXT_PUBLIC_SITE_URL ?? "https://eriksvoice.co.il").replace(/\/$/, "");
+const origin = () => publicOrigin();
 
 /** Who and which call: filled by the provider from its system variables, never by the model. */
 const SYSTEM_PROPS = {
