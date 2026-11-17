@@ -14,7 +14,8 @@ type Db = ReturnType<typeof createAdminClient>;
  * Actions the flow handles:
  * - calendar_events { from, to, phone? } → the events in that range (all, or only the caller's
  *   when phone is given). Answer: a list of events, or { events: [...] } / { items: [...] }.
- * - calendar_create { start, end, title, description, email, phone, timezone } → { id }
+ * - calendar_create { start, end, title, description, name, email, phone, timezone, invite } → { id }
+ *   (invite = true: add email as a guest and let Google send the invitation)
  * - calendar_delete { event_id } → anything 2xx
  */
 

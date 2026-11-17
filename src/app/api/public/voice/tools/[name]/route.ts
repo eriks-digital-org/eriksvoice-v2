@@ -33,7 +33,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ name: s
   const { data: agent } = await db.from("agents").select("id, client_id, name, status").eq("provider_agent_id", String(body.agent_id ?? "")).maybeSingle();
   if (!agent) return NextResponse.json({ result: "הסוכן לא מוכר למערכת." });
   const [{ data: client }, { data: numbers }] = await Promise.all([
-    db.from("clients").select("name, slug, status, call_tools, meeting_minutes").eq("id", agent.client_id).single(),
+    db.from("clients").select("name, slug, status, call_tools, meeting_minutes, meeting_invite").eq("id", agent.client_id).single(),
     db.from("phone_numbers").select("e164").eq("client_id", agent.client_id),
   ]);
   if (!client || client.status === "paused") return NextResponse.json({ result: "השירות של העסק מושהה כרגע." });
@@ -44,7 +44,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ name: s
     const answer = await handler({
       db,
       clientId: agent.client_id as string,
-      client: { name: client.name as string, slug: client.slug as string, meeting_minutes: (client.meeting_minutes as number) ?? 30 },
+      client: { name: client.name as string, slug: client.slug as string, meeting_minutes: (client.meeting_minutes as number) ?? 30, meeting_invite: client.meeting_invite === true },
       agentId: agent.id as string,
       agentName: agent.name as string,
       phone,

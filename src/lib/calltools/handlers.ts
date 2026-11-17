@@ -24,7 +24,7 @@ export type ToolBody = Record<string, unknown> & { agent_id?: string; caller?: s
 export interface ToolCtx {
   db: Db;
   clientId: string;
-  client: { name: string; slug: string; meeting_minutes: number };
+  client: { name: string; slug: string; meeting_minutes: number; meeting_invite?: boolean };
   agentId: string;
   agentName: string;
   /** the person on the line (E.164), or "" (browser test) */
@@ -177,6 +177,8 @@ async function bookMeeting(ctx: ToolCtx): Promise<ToolAnswer> {
       name,
       phone: ctx.phone,
       email,
+      // The business's calendar invites the caller (Google sends it from the business's account).
+      invite: Boolean(ctx.client.meeting_invite && email),
     });
     id = String((created as { id?: unknown } | null)?.id ?? "");
   } catch (e) {
