@@ -17,6 +17,7 @@ import { loadCatalog } from "@/lib/voice/catalog";
 import { isTwilioConfigured, listOwnedNumbers, type OwnedNumber } from "@/lib/telephony/twilio";
 import { NumbersPanel } from "./NumbersPanel";
 import { CrmPanel } from "./CrmPanel";
+import { CallToolsPanel } from "./CallToolsPanel";
 import { crmBaseUrl, crmHookSecret, crmKey, type CrmConfig } from "@/lib/crm/erikscrm";
 
 export default async function ClientPage({ params }: { params: Promise<{ id: string }> }) {
@@ -35,13 +36,15 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
     db.from("connections").select("id", { count: "exact", head: true }).eq("client_id", id).eq("status", "connected"),
     db.from("connections").select("flow_url").eq("client_id", id).eq("kind", "activepieces").maybeSingle(),
   ]);
-  const [{ data: conns }, crmBase, crmKeySaved, crmHook, typeNames, { count: ownWords }] = await Promise.all([
+  const [{ data: conns }, crmBase, crmKeySaved, crmHook, typeNames, { count: ownWords }, { data: toolsRow }, { data: meetings }] = await Promise.all([
     db.from("connections").select("kind, status, last_error, requested_at, config").eq("client_id", id),
     crmBaseUrl(),
     crmKey(id),
     crmHookSecret(id),
     agentTypeNames(),
     db.from("pronunciation_rules").select("id", { count: "exact", head: true }).eq("client_id", id),
+    db.from("clients").select("call_tools, meeting_minutes, transfer_phone").eq("id", id).single(),
+    db.from("appointments").select("id, name, phone, starts_at, note").eq("client_id", id).eq("status", "booked").gte("starts_at", new Date().toISOString()).order("starts_at").limit(5),
   ]);
   const connOf = (kind: string) => (conns ?? []).find((c) => c.kind === kind) as { status: ConnStatus; last_error: string | null; requested_at: string | null } | undefined;
   const site = process.env.NEXT_PUBLIC_SITE_URL ?? "https://eriksvoice.co.il";
@@ -201,6 +204,28 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
             );
           })}
         </ul>
+      </Panel>
+
+      <Panel title="כלים בזמן שיחה" subtitle="פעולות שהסוכנים של העסק יכולים לבצע תוך כדי שיחה. נשלחים לסוכנים הפעילים בשמירה.">
+        <CallToolsPanel
+          clientId={client.id}
+          enabled={(toolsRow?.call_tools as string[] | undefined) ?? []}
+          meetingMinutes={(toolsRow?.meeting_minutes as number | undefined) ?? 30}
+          transferPhone={(toolsRow?.transfer_phone as string | undefined) ?? ""}
+        />
+        {(meetings ?? []).length > 0 && (
+          <div className="mt-6">
+            <h3 className="mb-2 text-[16px] font-medium text-ink">פגישות קרובות</h3>
+            <ul className="divide-y divide-border">
+              {(meetings ?? []).map((m) => (
+                <li key={m.id as string} className="flex flex-wrap justify-between gap-2 py-2 text-[15px]">
+                  <span className="text-ink">{(m.name as string) || (m.phone as string)}{m.note ? ` · ${m.note as string}` : ""}</span>
+                  <span className="num text-ink-muted">{new Date(m.starts_at as string).toLocaleString("he-IL", { timeZone: "Asia/Jerusalem", weekday: "short", day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit" })}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </Panel>
 
       <Panel

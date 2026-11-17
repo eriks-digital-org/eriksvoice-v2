@@ -58,7 +58,7 @@ function matches(spec: AutomationSpec, e: AutomationEvent): boolean {
     if (c.outcome && c.outcome !== "any" && c.outcome !== e.call.outcome) return false;
   }
   if (e.lead && c.tag && !e.lead.tags.includes(c.tag)) return false;
-  if (e.type === "webhook_in" && c.event && c.event !== e.name) return false;
+  if ((e.type === "webhook_in" || e.type === "agent_action") && c.event && c.event !== e.name) return false;
   if (e.type === "crm_status" && c.status && c.status.trim() !== (e.crm?.status ?? "")) return false;
   return true;
 }

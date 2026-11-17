@@ -197,6 +197,14 @@ export interface AgentConfig {
   dataCollection?: Record<string, { type: "string" | "boolean" | "integer" | "number"; description: string }>;
   /** Pronunciation dictionaries in order (the business's own words, then the shared list). */
   pronunciation?: PronunciationLocator[];
+  /** In-call tools (webhook tools at the provider), and the provider's own tools. Undefined = leave as is. */
+  callTools?: {
+    toolIds: string[];
+    endCall: boolean;
+    voicemail: boolean;
+    /** E.164 of a person to transfer to, or null */
+    transferPhone: string | null;
+  };
 }
 
 export interface PronunciationLocator {
@@ -235,6 +243,35 @@ function body(c: AgentConfig) {
         }
       : null,
   };
+  if (c.callTools) {
+    prompt.tool_ids = c.callTools.toolIds;
+    const builtIn = (prompt.built_in_tools ?? {}) as Record<string, unknown>;
+    builtIn.end_call = c.callTools.endCall
+      ? { type: "system", name: "end_call", description: "", params: { system_tool_type: "end_call" } }
+      : null;
+    builtIn.voicemail_detection = c.callTools.voicemail
+      ? { type: "system", name: "voicemail_detection", description: "", params: { system_tool_type: "voicemail_detection", voicemail_message: null } }
+      : null;
+    builtIn.transfer_to_number = c.callTools.transferPhone
+      ? {
+          type: "system",
+          name: "transfer_to_number",
+          description: "העברת השיחה לנציג אנושי של העסק כשהלקוח מבקש לדבר עם אדם",
+          params: {
+            system_tool_type: "transfer_to_number",
+            transfers: [
+              {
+                transfer_destination: { type: "phone", phone_number: c.callTools.transferPhone },
+                condition: "הלקוח מבקש לדבר עם נציג אנושי, או שהבקשה שלו דורשת אדם",
+                transfer_type: "conference",
+              },
+            ],
+            enable_client_message: true,
+          },
+        }
+      : null;
+    prompt.built_in_tools = builtIn;
+  }
   if (c.realtimeModel) prompt.realtime_model = c.realtimeModel;
   else if (c.llm) prompt.llm = c.llm;
   const tts: Record<string, unknown> = { ...(c.realtimeModel ? {} : { model_id: c.ttsModel }), ...c.voiceSettings };
@@ -250,6 +287,34 @@ function body(c: AgentConfig) {
     },
     ...(c.dataCollection ? { platform_settings: { data_collection: c.dataCollection } } : {}),
   };
+}
+
+/** One in-call webhook tool at the provider (shared by every agent; see lib/calltools). */
+export interface WebhookToolConfig {
+  type: "webhook";
+  name: string;
+  description: string;
+  response_timeout_secs: number;
+  api_schema: {
+    url: string;
+    method: "POST";
+    request_headers: Record<string, string>;
+    request_body_schema: {
+      type: "object";
+      description: string;
+      required: string[];
+      properties: Record<string, { type: string; description?: string; dynamic_variable?: string }>;
+    };
+  };
+}
+
+export async function createTool(config: WebhookToolConfig): Promise<string> {
+  const r = await call<{ id: string }>("/v1/convai/tools", { method: "POST", body: JSON.stringify({ tool_config: config }) });
+  return r.id;
+}
+
+export async function updateTool(id: string, config: WebhookToolConfig): Promise<void> {
+  await call(`/v1/convai/tools/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify({ tool_config: config }) });
 }
 
 export async function createAgent(c: AgentConfig): Promise<string> {

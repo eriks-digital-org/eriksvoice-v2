@@ -8,6 +8,7 @@ import { routeClientNumbers } from "./phones";
 import { isRealtimeModel } from "@/lib/voice/models";
 import { CALLBACK_FIELDS } from "@/lib/calls/callback-time";
 import { pronunciationFor } from "@/lib/voice/pronunciation";
+import { ensureCallTools } from "@/lib/calltools/provider";
 
 type Db = ReturnType<typeof createAdminClient>;
 
@@ -81,11 +82,12 @@ async function pushAgent(
   knowledge: Awaited<ReturnType<typeof syncKnowledge>>,
   peers: Peer[],
   pronunciation: voice.PronunciationLocator[],
+  toolIds: Record<string, string>,
 ) {
   const [{ data: type }, { data: settings }, { data: client }, { data: others }, { data: automations }] = await Promise.all([
     db.from("agent_types").select("*").eq("key", agent.type_key).single(),
     db.from("system_settings").select("safety_rules").eq("id", true).single(),
-    db.from("clients").select("slug, name, industry, address, contact_phone, business_hours").eq("id", agent.client_id).single(),
+    db.from("clients").select("slug, name, industry, address, contact_phone, business_hours, call_tools, transfer_phone").eq("id", agent.client_id).single(),
     db.from("clients").select("name").neq("id", agent.client_id),
     db.from("automations").select("spec").eq("client_id", agent.client_id).eq("enabled", true),
   ]);
@@ -150,6 +152,17 @@ async function pushAgent(
     transfers,
     dataCollection: CALLBACK_FIELDS,
     pronunciation,
+    callTools: (() => {
+      const on = new Set((client.call_tools as string[] | null) ?? []);
+      return {
+        toolIds: Object.entries(toolIds)
+          .filter(([name]) => on.has(name))
+          .map(([, id]) => id),
+        endCall: on.has("end_call"),
+        voicemail: on.has("voicemail"),
+        transferPhone: on.has("transfer_human") && client.transfer_phone ? (client.transfer_phone as string) : null,
+      };
+    })(),
   };
 
   // If the provider rejects the hand-over or the call-back settings, the agent is still
@@ -160,6 +173,12 @@ async function pushAgent(
       return await fn(config);
     } catch (e) {
       if (!rejected(e)) throw e;
+      // Rejected in-call tools must not keep the agent from being saved.
+      if (config.callTools && /tool|voicemail|transfer_to_number|end_call/i.test((e as Error).message)) {
+        console.error("sync: retrying without in-call tools", (e as Error).message);
+        config.callTools = undefined;
+        return send(fn);
+      }
       // A rejected pronunciation dictionary must not keep the agent from being saved.
       if (config.pronunciation?.length && /pronunciation/i.test((e as Error).message)) {
         console.error("sync: retrying without pronunciation dictionary", (e as Error).message);
@@ -215,6 +234,10 @@ export async function syncClient(clientId: string): Promise<SyncResult> {
   }
   const { data: types } = await db.from("agent_types").select("key, name, purpose, realtime_model");
   const pronunciation = await pronunciationFor(db, clientId);
+  const toolIds = await ensureCallTools(db).catch((e) => {
+    console.error("call tools", e);
+    return {} as Record<string, string>;
+  });
   const peers: Peer[] = agents.map((a) => {
     const t = (types ?? []).find((x) => x.key === a.type_key);
     return {
@@ -233,7 +256,7 @@ export async function syncClient(clientId: string): Promise<SyncResult> {
     let created = false;
     for (const agent of agents) {
       try {
-        if (await pushAgent(db, agent, knowledge, peers, pronunciation)) {
+        if (await pushAgent(db, agent, knowledge, peers, pronunciation, toolIds)) {
           created = true;
           const p = peers.find((x) => x.id === agent.id);
           if (p) p.providerId = agent.provider_agent_id;

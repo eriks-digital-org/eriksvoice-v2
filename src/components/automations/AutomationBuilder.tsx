@@ -89,8 +89,8 @@ export function AutomationBuilder({
             <Input value={spec.trigger.config.status ?? ""} onChange={(e) => setConfig("status", e.target.value)} className={inputCls} placeholder="בתהליך" />
           </Field>
         )}
-        {spec.trigger.type === "webhook_in" && (
-          <Field label="רק אירוע בשם" hint='השדה "event" בנתונים. ריק = כל מה שנכנס'>
+        {(spec.trigger.type === "webhook_in" || spec.trigger.type === "agent_action") && (
+          <Field label={spec.trigger.type === "agent_action" ? "רק פעולה בשם" : "רק אירוע בשם"} hint={spec.trigger.type === "agent_action" ? "שם הפעולה שהסוכן מבקש. ריק = כל פעולה" : 'השדה "event" בנתונים. ריק = כל מה שנכנס'}>
             <Input value={spec.trigger.config.event ?? ""} onChange={(e) => setConfig("event", e.target.value)} dir="ltr" className={`${inputCls} text-end`} placeholder="meeting_booked" />
           </Field>
         )}
