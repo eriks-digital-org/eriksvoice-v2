@@ -6,7 +6,19 @@ import { CALL_TOOLS } from "@/lib/calltools/definitions";
 import { saveCallToolsAction, type ToolsState } from "./tools-actions";
 
 /** Admin: the in-call tools of one business. */
-export function CallToolsPanel({ clientId, enabled, meetingMinutes, transferPhone }: { clientId: string; enabled: string[]; meetingMinutes: number; transferPhone: string }) {
+export function CallToolsPanel({
+  clientId,
+  enabled,
+  meetingMinutes,
+  meetingInvite,
+  transferPhone,
+}: {
+  clientId: string;
+  enabled: string[];
+  meetingMinutes: number;
+  meetingInvite: boolean;
+  transferPhone: string;
+}) {
   const [state, action, pending] = useActionState<ToolsState, FormData>(saveCallToolsAction, {});
   const on = new Set(enabled);
   return (
@@ -35,6 +47,13 @@ export function CallToolsPanel({ clientId, enabled, meetingMinutes, transferPhon
           <Input name="transfer_phone" defaultValue={transferPhone} dir="ltr" placeholder="050…" className="h-12 rounded-2xl text-end text-[16px]" />
         </label>
       </div>
+      <label className="flex cursor-pointer items-start gap-3 rounded-2xl bg-muted/60 p-3">
+        <input type="checkbox" name="meeting_invite" defaultChecked={meetingInvite} className="mt-1 size-4 accent-[var(--violet)]" />
+        <span className="min-w-0">
+          <span className="block text-[16px] font-medium text-ink">הזמנה מיומן גוגל ללקוח</span>
+          <span className="block text-[13px] text-ink-muted">כשהלקוח מסר מייל, גוגל שולח לו הזמנה לפגישה מהחשבון של העסק, והיא נכנסת ליומן שלו</span>
+        </span>
+      </label>
       <p className="text-[14px] text-ink-muted">
         הפגישות נבדקות ונקבעות ביומן גוגל של העסק דרך ה־flow שלו ב־Activepieces (חובה להגדיר אותו למטה), בשעות הפעילות של העסק (שעות החיוג ברשימת החיוג, או א׳–ה׳ 09:00–19:00). שום פגישה לא נשמרת ב־EriksVoice. מה הסוכן אומר ומתי הוא משתמש בכל כלי נקבע בהוראות שלך לסוכן.
       </p>

@@ -43,7 +43,7 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
     crmHookSecret(id),
     agentTypeNames(),
     db.from("pronunciation_rules").select("id", { count: "exact", head: true }).eq("client_id", id),
-    db.from("clients").select("call_tools, meeting_minutes, transfer_phone").eq("id", id).single(),
+    db.from("clients").select("call_tools, meeting_minutes, transfer_phone, meeting_invite").eq("id", id).single(),
   ]);
   const connOf = (kind: string) => (conns ?? []).find((c) => c.kind === kind) as { status: ConnStatus; last_error: string | null; requested_at: string | null } | undefined;
   const site = process.env.NEXT_PUBLIC_SITE_URL ?? "https://eriksvoice.co.il";
@@ -210,6 +210,7 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
           clientId={client.id}
           enabled={(toolsRow?.call_tools as string[] | undefined) ?? []}
           meetingMinutes={(toolsRow?.meeting_minutes as number | undefined) ?? 30}
+          meetingInvite={(toolsRow?.meeting_invite as boolean | undefined) ?? false}
           transferPhone={(toolsRow?.transfer_phone as string | undefined) ?? ""}
         />
       </Panel>

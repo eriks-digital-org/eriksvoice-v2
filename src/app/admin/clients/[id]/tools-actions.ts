@@ -23,7 +23,7 @@ export async function saveCallToolsAction(_: ToolsState, form: FormData): Promis
   if (tools.includes("transfer_human") && !phone) return { error: "להעברה לנציג צריך מספר טלפון" };
   const { error } = await createAdminClient()
     .from("clients")
-    .update({ call_tools: tools, meeting_minutes: minutes, transfer_phone: phone ?? "" })
+    .update({ call_tools: tools, meeting_minutes: minutes, transfer_phone: phone ?? "", meeting_invite: form.get("meeting_invite") === "on" })
     .eq("id", clientId);
   if (error) return { error: "השמירה נכשלה" };
   const r = await syncClient(clientId);
