@@ -7,7 +7,7 @@ import type { AllowedVoice } from "@/lib/voice/models";
 import { routeClientNumbers } from "./phones";
 import { isRealtimeModel } from "@/lib/voice/models";
 import { CALLBACK_FIELDS } from "@/lib/calls/callback-time";
-import { ensurePronunciationDictionary } from "@/lib/voice/pronunciation";
+import { pronunciationFor } from "@/lib/voice/pronunciation";
 
 type Db = ReturnType<typeof createAdminClient>;
 
@@ -80,7 +80,7 @@ async function pushAgent(
   agent: AgentFull,
   knowledge: Awaited<ReturnType<typeof syncKnowledge>>,
   peers: Peer[],
-  pronunciation: voice.PronunciationLocator | null,
+  pronunciation: voice.PronunciationLocator[],
 ) {
   const [{ data: type }, { data: settings }, { data: client }, { data: others }, { data: automations }] = await Promise.all([
     db.from("agent_types").select("*").eq("key", agent.type_key).single(),
@@ -161,9 +161,9 @@ async function pushAgent(
     } catch (e) {
       if (!rejected(e)) throw e;
       // A rejected pronunciation dictionary must not keep the agent from being saved.
-      if (config.pronunciation && /pronunciation/i.test((e as Error).message)) {
+      if (config.pronunciation?.length && /pronunciation/i.test((e as Error).message)) {
         console.error("sync: retrying without pronunciation dictionary", (e as Error).message);
-        config.pronunciation = null;
+        config.pronunciation = [];
         return send(fn);
       }
       console.error("sync: retrying without transfer tool", (e as Error).message);
@@ -214,7 +214,7 @@ export async function syncClient(clientId: string): Promise<SyncResult> {
     return { ok: false, error: message(e) };
   }
   const { data: types } = await db.from("agent_types").select("key, name, purpose, realtime_model");
-  const pronunciation = await ensurePronunciationDictionary(db);
+  const pronunciation = await pronunciationFor(db, clientId);
   const peers: Peer[] = agents.map((a) => {
     const t = (types ?? []).find((x) => x.key === a.type_key);
     return {

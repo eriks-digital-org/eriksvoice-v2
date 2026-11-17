@@ -35,12 +35,13 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
     db.from("connections").select("id", { count: "exact", head: true }).eq("client_id", id).eq("status", "connected"),
     db.from("connections").select("flow_url").eq("client_id", id).eq("kind", "activepieces").maybeSingle(),
   ]);
-  const [{ data: conns }, crmBase, crmKeySaved, crmHook, typeNames] = await Promise.all([
+  const [{ data: conns }, crmBase, crmKeySaved, crmHook, typeNames, { count: ownWords }] = await Promise.all([
     db.from("connections").select("kind, status, last_error, requested_at, config").eq("client_id", id),
     crmBaseUrl(),
     crmKey(id),
     crmHookSecret(id),
     agentTypeNames(),
+    db.from("pronunciation_rules").select("id", { count: "exact", head: true }).eq("client_id", id),
   ]);
   const connOf = (kind: string) => (conns ?? []).find((c) => c.kind === kind) as { status: ConnStatus; last_error: string | null; requested_at: string | null } | undefined;
   const site = process.env.NEXT_PUBLIC_SITE_URL ?? "https://eriksvoice.co.il";
@@ -200,6 +201,18 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
             );
           })}
         </ul>
+      </Panel>
+
+      <Panel
+        title="מילון הגייה של העסק"
+        subtitle="מילים שרק הסוכנים של העסק הזה אומרים, כמו שם העסק, רחובות ושמות אנשי צוות."
+        action={
+          <Link href={`/admin/clients/${client.id}/pronunciation`} className="text-[15px] font-medium text-violet">
+            עריכה
+          </Link>
+        }
+      >
+        <p className="text-[16px] text-ink-muted">{ownWords ? `${ownWords} מילים משלו, בנוסף למילון המשותף.` : "אין עדיין מילים משלו. משתמשים במילון המשותף."}</p>
       </Panel>
 
       <Panel title="ERIKSCRM" subtitle="זיהוי מתקשר מה־CRM, רישום שיחות, עדכון לידים מהאוטומציות, ולידים חדשים מה־CRM.">

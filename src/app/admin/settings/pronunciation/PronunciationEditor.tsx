@@ -12,7 +12,8 @@ type Row = PronunciationRow & { key: string };
 let counter = 0;
 const newKey = () => `new-${++counter}`;
 
-export function PronunciationEditor({ rows: initial }: { rows: PronunciationRow[] }) {
+/** The shared list, or one business's own words when clientId is given. */
+export function PronunciationEditor({ rows: initial, clientId }: { rows: PronunciationRow[]; clientId?: string }) {
   const [rows, setRows] = useState<Row[]>(() => initial.map((r) => ({ ...r, key: r.id ?? newKey() })));
   const [query, setQuery] = useState("");
   const [state, action, pending] = useActionState<PronunciationState, FormData>(savePronunciation, {});
@@ -45,6 +46,7 @@ export function PronunciationEditor({ rows: initial }: { rows: PronunciationRow[
   return (
     <form action={action} className="flex flex-col gap-6">
       <input type="hidden" name="rows" value={payload} />
+      {clientId && <input type="hidden" name="client_id" value={clientId} />}
       <Input
         value={query}
         onChange={(e) => setQuery(e.target.value)}

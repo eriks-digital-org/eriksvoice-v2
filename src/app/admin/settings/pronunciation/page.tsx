@@ -13,12 +13,13 @@ export default async function PronunciationPage() {
   const { data } = await createAdminClient()
     .from("pronunciation_rules")
     .select("id, term, say, note, category, enabled")
+    .is("client_id", null)
     .order("position");
   return (
     <div className="flex flex-col gap-6 sm:gap-8">
       <PageHeader
         title="מילון הגייה"
-        description="איך הקול אומר מילים שהסוכן כותב, למשל CRM ← סי. אָר. אֶם. המילון משותף לכל הסוכנים של כל הלקוחות, ומשפיע רק על הדיבור: הפרומפט לא משתנה. ההתאמה רגישה לאותיות גדולות וקטנות, והמערכת מוסיפה לבד את הצורות הנפוצות (lead, Lead)."
+        description="איך הקול אומר מילים שהסוכן כותב, למשל CRM ← סי. אָר. אֶם. המילון משותף לכל הסוכנים של כל הלקוחות (מילים של עסק אחד מוסיפים בדף הלקוח ← מילון הגייה), ומשפיע רק על הדיבור: הפרומפט לא משתנה. ההתאמה רגישה לאותיות גדולות וקטנות, והמערכת מוסיפה לבד את הצורות הנפוצות (lead, Lead)."
         actions={
           <Link href="/admin/settings" className="min-h-11 rounded-full bg-card px-4 py-2.5 text-[15px] font-medium text-ink shadow-soft">
             חזרה להגדרות
