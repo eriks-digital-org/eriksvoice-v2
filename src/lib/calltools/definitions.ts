@@ -40,7 +40,7 @@ export const CALL_TOOLS: CallToolDef[] = [
   {
     name: "book_meeting",
     label: "קביעת פגישה",
-    hint: "קובע פגישה, ומעדכן CRM ואוטומציות של \"פגישה נקבעה\"",
+    hint: "קובע פגישה ב־EriksVoice ומפעיל אוטומציות של \"פגישה נקבעה\"",
     kind: "webhook",
     description: "קובע פגישה במועד פנוי אחרי שהלקוח אישר את המועד. מחזיר אישור או הודעה שהמועד תפוס.",
     params: {

@@ -166,20 +166,6 @@ async function bookMeeting(ctx: ToolCtx): Promise<ToolAnswer> {
     lead: lead ? { id: lead.id, tags: lead.tags ?? [] } : undefined,
     data: { meeting_at: at, meeting_start: slotText(start), meeting_note: note, meeting_minutes: ctx.client.meeting_minutes },
   });
-  // Also a meeting on the lead's card in the CRM, when it is connected (best effort).
-  if (ctx.phone && (await crm.crmConnected(ctx.clientId))) {
-    try {
-      const card = await crm.ensureLead(ctx.clientId, ctx.phone, name, `ev-meet-${id}-lead`);
-      await crm.addTask(
-        ctx.clientId,
-        card.id,
-        { title: `פגישה: ${name || ctx.phone}`.slice(0, 200), starts_at: start.toISOString(), duration_seconds: ctx.client.meeting_minutes * 60, kind: "meeting", ...(note ? { note } : {}) },
-        `ev-meet-${id}`,
-      );
-    } catch (e) {
-      console.error("call tools: CRM meeting", (e as Error).message);
-    }
-  }
   return say(`הפגישה נקבעה ל${at}.`);
 }
 
