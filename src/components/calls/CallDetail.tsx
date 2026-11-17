@@ -2,9 +2,19 @@ import { Pill } from "@/components/ds/StatusBadge";
 import { Panel } from "@/components/ds/primitives";
 import { StatTile } from "@/components/ds/kit";
 import { directionLabel, duration, outcomeLabel, statusLabel, when, type CallFull } from "./format";
+import { CallResultForm } from "./CallResultForm";
 
 /** One call: recording, summary, collected data and the full transcript. */
-export function CallDetail({ call }: { call: CallFull }) {
+export function CallDetail({
+  call,
+  saveResult,
+  resultFields = {},
+}: {
+  call: CallFull;
+  /** Server action that saves the call's result (gets "call_id", "result", "result_note" + resultFields). */
+  saveResult?: (form: FormData) => Promise<void>;
+  resultFields?: Record<string, string>;
+}) {
   const o = statusLabel[call.status] ?? outcomeLabel[call.outcome];
   const collected = Object.entries(call.collected ?? {}).filter(([, v]) => v !== null && v !== "");
   return (
@@ -15,6 +25,12 @@ export function CallDetail({ call }: { call: CallFull }) {
         <StatTile label="כיוון" value={<span className="text-[20px]">{directionLabel[call.direction]}</span>} />
         <StatTile label="תוצאה" value={<Pill tone={o.tone}>{o.label}</Pill>} />
       </div>
+
+      {saveResult && (
+        <Panel title="תוצאת השיחה" subtitle="לסינון ולדוחות. נשמר רק אצלכם.">
+          <CallResultForm action={saveResult} fields={{ call_id: call.id, ...resultFields }} result={call.result} note={call.result_note} />
+        </Panel>
+      )}
 
       {call.has_audio && (
         <Panel title="הקלטה">

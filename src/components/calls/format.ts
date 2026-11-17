@@ -10,6 +10,8 @@ export interface CallListItem {
   end_reason: string;
   agent_name: string | null;
   client_name?: string | null;
+  result: CallResult | null;
+  result_note: string;
 }
 
 export interface CallFull extends CallListItem {
@@ -44,3 +46,15 @@ export const statusLabel: Record<string, { label: string; tone: "info" | "danger
 };
 
 export const CALLS_PAGE = 30;
+
+/** The business's own result for a call (fixed list + short note). */
+export const RESULTS = {
+  meeting: "נקבעה פגישה",
+  interested: "מעוניין",
+  not_interested: "לא מעוניין",
+  callback: "לחזור אליו",
+  irrelevant: "לא רלוונטי",
+  other: "אחר",
+} as const;
+export type CallResult = keyof typeof RESULTS;
+export const isResult = (v: string): v is CallResult => v in RESULTS;

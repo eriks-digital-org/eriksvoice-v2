@@ -8,19 +8,22 @@ import { createClient } from "@/lib/supabase/server";
 import type { AgentRow } from "@/lib/data/types";
 import { monthKey } from "@/lib/calls/ingest";
 import { israelDayStart } from "@/lib/time";
+import { CallsChart, type ChartCall } from "@/components/dashboard/CallsChart";
 
 export default async function PortalHome({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   const { access, client } = await requireMember(slug);
   const supabase = await createClient();
   const today = israelDayStart().toISOString();
-  const [{ data: agents }, { data: row }, { data: usage }, { count: callsToday }, { count: callbacks }, { count: waiting }] = await Promise.all([
+  const since = israelDayStart(new Date(), 13).toISOString();
+  const [{ data: agents }, { data: row }, { data: usage }, { count: callsToday }, { count: callbacks }, { count: waiting }, { data: recent }] = await Promise.all([
     supabase.from("agents").select("id, client_id, type_key, name, status, voice_id, opening_line").eq("client_id", client.id).order("created_at"),
     supabase.from("clients").select("monthly_minutes").eq("id", client.id).maybeSingle(),
     supabase.from("client_month_usage").select("minutes").eq("client_id", client.id).eq("month", `${monthKey()}T00:00:00`).maybeSingle(),
     supabase.from("calls").select("id", { count: "exact", head: true }).eq("client_id", client.id).gte("started_at", today),
     supabase.from("callbacks").select("id", { count: "exact", head: true }).eq("client_id", client.id).eq("status", "scheduled"),
     supabase.from("leads").select("id", { count: "exact", head: true }).eq("client_id", client.id).eq("status", "queued"),
+    supabase.from("calls").select("started_at, duration_secs, status, direction, result").eq("client_id", client.id).gte("started_at", since).limit(5000),
   ]);
   const quota = (row?.monthly_minutes as number | undefined) ?? 0;
   const left = quota > 0 ? Math.max(0, quota - ((usage?.minutes as number | undefined) ?? 0)).toLocaleString() : "ללא הגבלה";
@@ -36,6 +39,9 @@ export default async function PortalHome({ params }: { params: Promise<{ slug: s
         <StatTile label="לידים שמחכים לשיחה" value={waiting ?? 0} />
         <StatTile label="דקות שנשארו החודש" value={left} />
       </div>
+      <Panel title="שיחות בשבועיים האחרונים" action={<Link href={`/${slug}/calls`} className="text-[15px] font-medium text-violet">לכל השיחות</Link>}>
+        <CallsChart calls={(recent ?? []) as ChartCall[]} />
+      </Panel>
       <Panel title="הצוות שלי" action={<Link href={`/${slug}/team`} className="text-[15px] font-medium text-violet">לכל הצוות</Link>}>
         {list.length === 0 ? (
           <p className="text-[16px] text-ink-muted">הסוכנים שלכם יופיעו כאן אחרי שנגדיר אותם.</p>
