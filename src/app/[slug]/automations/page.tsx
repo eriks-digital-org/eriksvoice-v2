@@ -10,7 +10,7 @@ import { automationRowAction } from "./actions";
 
 export const metadata: Metadata = { title: "אוטומציות" };
 
-type Row = { id: string; name: string; enabled: boolean; spec: AutomationSpec; template_id: string | null; template_version: number | null; last_run_at: string | null };
+type Row = { id: string; name: string; enabled: boolean; build_status: string; spec: AutomationSpec; template_id: string | null; template_version: number | null; last_run_at: string | null };
 type Template = { id: string; name: string; title: string; saves: string; category: string; version: number };
 type Run = { id: string; automation_id: string; status: string; created_at: string; last_error: string | null; log: { action: string; ok: boolean; message: string }[] };
 
@@ -28,7 +28,7 @@ export default async function Page({ params }: { params: Promise<{ slug: string 
   const { client } = await requireMember(slug);
   const db = await createClient();
   const [{ data: autos }, { data: templates }, { data: runs }, { data: c }] = await Promise.all([
-    db.from("automations").select("id, name, enabled, spec, template_id, template_version, last_run_at").eq("client_id", client.id).order("created_at"),
+    db.from("automations").select("id, name, enabled, build_status, spec, template_id, template_version, last_run_at").eq("client_id", client.id).order("created_at"),
     db.from("automation_templates").select("id, name, title, saves, category, version").order("sort"),
     db.from("automation_runs").select("id, automation_id, status, created_at, last_error, log").eq("client_id", client.id).order("created_at", { ascending: false }).limit(20),
     db.from("clients").select("inbound_token").eq("id", client.id).single(),
@@ -66,13 +66,16 @@ export default async function Page({ params }: { params: Promise<{ slug: string 
                   <Link href={`/${slug}/automations/${a.id}`} className="min-w-0 flex-1">
                     <span className="block text-[17px] font-medium text-ink">{a.name}</span>
                     <span className="block text-[14px] text-ink-muted">{describe(a.spec)}</span>
+                    {a.build_status === "pending" && (
+                      <span className="mt-1 block text-[13px] text-violet">נשלחה לבנייה בחשבון שלכם. תקבלו התראה ומייל ברגע שהיא מוכנה, ואז היא מתחילה לפעול.</span>
+                    )}
                     {update && <span className="mt-1 block text-[13px] text-violet">יש עדכון לתבנית. פותחים כדי לראות ולהחיל.</span>}
                   </Link>
                   <form action={automationRowAction} className="flex items-center gap-2">
                     <input type="hidden" name="slug" value={slug} />
                     <input type="hidden" name="id" value={a.id} />
                     <button name="op" value={a.enabled ? "off" : "on"} className="min-h-10">
-                      {a.enabled ? <Pill tone="success">פעילה</Pill> : <Pill tone="neutral">מושהית</Pill>}
+                      {!a.enabled ? <Pill tone="neutral">מושהית</Pill> : a.build_status === "pending" ? <Pill tone="warning">בבנייה</Pill> : <Pill tone="success">פעילה</Pill>}
                     </button>
                     <button name="op" value="delete" className="min-h-10 rounded-full px-3 text-[13px] font-medium text-destructive hover:bg-destructive-soft">
                       מחיקה

@@ -190,28 +190,14 @@ async function bookMeeting(ctx: ToolCtx): Promise<ToolAnswer> {
     key: `meeting:${id || `${ctx.conversationId}:${start.toISOString()}`}`,
     contact: { name, phone: ctx.phone, email, leadId: lead?.id },
     lead: lead ? { id: lead.id, tags: lead.tags ?? [] } : undefined,
-    data: { meeting_at: at, meeting_start: slotText(start), meeting_note: note, meeting_details: details, meeting_minutes: ctx.client.meeting_minutes, meeting_phone: backPhone || ctx.phone },
+    data: { meeting_at: at, meeting_start: slotText(start), meeting_note: note, meeting_details: details, meeting_minutes: ctx.client.meeting_minutes, meeting_phone: backPhone || ctx.phone, agent_name: ctx.agentName },
   });
 
   // What the caller told us stays on their lead card.
   if (lead && ((!lead.name && name) || (!lead.email && email))) {
     await ctx.db.from("leads").update({ ...(lead.name ? {} : { name }), ...(lead.email ? {} : { email }) }).eq("id", lead.id);
   }
-  const lines = [`מועד: ${at} (${ctx.client.meeting_minutes} דקות)`, note && `נושא: ${note}`, details && `פרטים: ${details}`];
-  const [mailed] = await Promise.all([
-    email
-      ? sendMail([email], `הפגישה שלך עם ${ctx.client.name} נקבעה`, [`שלום ${name || ""},`.trim(), `קבענו לך פגישה עם ${ctx.client.name}.`, ...lines.slice(0, 2)].filter(Boolean).join("\n"))
-      : Promise.resolve(false),
-    notify({
-      clientId: ctx.clientId,
-      kind: "meeting",
-      title: `נקבעה פגישה: ${name || ctx.phone || "לקוח"}, ${at}`.slice(0, 200),
-      body: [...lines, `טלפון: ${backPhone || ctx.phone || "לא ידוע"}`, email && `מייל: ${email}`, `נקבע על ידי ${ctx.agentName}`].filter(Boolean).join("\n"),
-      link: `/${ctx.client.slug}/calls`,
-      email: true,
-    }),
-  ]);
-  return say(`הפגישה נקבעה ל${at}.${mailed ? " אישור נשלח ללקוח במייל." : ""}`);
+  return say(`הפגישה נקבעה ל${at}.`);
 }
 
 /** The caller's upcoming meetings in the business's calendar (by the phone in the event). */
@@ -256,13 +242,8 @@ async function cancelMeeting(ctx: ToolCtx): Promise<ToolAnswer> {
       clientId: ctx.clientId,
       key: `meeting:${next.id}:cancelled`,
       contact: { name: lead?.name ?? "", phone: ctx.phone, email: lead?.email ?? "", leadId: lead?.id },
-      data: { meeting_at: at },
+      data: { meeting_at: at, agent_name: ctx.agentName },
     });
-    const who = lead?.name || ctx.phone;
-    await Promise.all([
-      lead?.email ? sendMail([lead.email], `הפגישה שלך עם ${ctx.client.name} בוטלה`, `הפגישה של ${at} בוטלה לבקשתך.`) : null,
-      notify({ clientId: ctx.clientId, kind: "meeting", title: `פגישה בוטלה: ${who}, ${at}`.slice(0, 200), body: `בוטלה בשיחה עם ${ctx.agentName}.`, link: `/${ctx.client.slug}/calls`, email: true }),
-    ]);
     return say(`הפגישה של ${at} בוטלה.`);
   } catch (e) {
     return calendarError(e);

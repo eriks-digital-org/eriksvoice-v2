@@ -200,6 +200,9 @@ export function AutomationBuilder({
                     <Trash2 className="size-4" />
                   </button>
                 </div>
+                {a.type === "activepieces" && (
+                  <p className="text-[14px] text-ink-muted">פעולה בחשבון שלכם נבנית אצלנו. אחרי השמירה היא נשלחת לבנייה, ותקבלו התראה ומייל כשהיא מוכנה ופועלת.</p>
+                )}
                 {def?.fields.map((f) => {
                   const v = a.config[f.key] ?? "";
                   const onChange = (val: string) =>
