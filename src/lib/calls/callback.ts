@@ -14,7 +14,7 @@ const RETRY_MINUTES = 30;
 const STALE_MINUTES = 20;
 
 /** The client's calling hours: the dialer's when set, otherwise Sunday–Thursday 09:00–19:00. */
-async function windowOf(db: Db, clientId: string): Promise<CallWindow> {
+export async function windowOf(db: Db, clientId: string): Promise<CallWindow> {
   const { data } = await db.from("dialer_settings").select("days, start_minute, end_minute").eq("client_id", clientId).maybeSingle();
   return data ? { days: data.days as number[], start_minute: data.start_minute as number, end_minute: data.end_minute as number } : DEFAULT_WINDOW;
 }
