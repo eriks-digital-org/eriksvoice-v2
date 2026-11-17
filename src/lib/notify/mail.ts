@@ -1,5 +1,6 @@
 import "server-only";
 import { getSecret } from "@/lib/providers/secrets";
+import { publicOrigin } from "@/lib/origin";
 
 const FROM = "EriksVoice <noreply@eriksvoice.co.il>";
 
@@ -8,7 +9,7 @@ export async function sendMail(to: string[], subject: string, text: string, link
   const key = await getSecret("utobo_api_key");
   const list = [...new Set(to.map((t) => t.trim()).filter((t) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(t)))];
   if (!key || !list.length) return false;
-  const site = process.env.NEXT_PUBLIC_SITE_URL ?? "https://eriksvoice.co.il";
+  const site = publicOrigin();
   const url = link ? new URL(link, site).toString() : null;
   const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c] as string);
   const html = `<div dir="rtl" style="font-family:Arial,sans-serif;font-size:16px;line-height:1.6;color:#1d1b26">
