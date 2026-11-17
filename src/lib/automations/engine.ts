@@ -6,6 +6,7 @@ import { sendSms } from "@/lib/telephony/twilio";
 import { sendMail } from "@/lib/notify/mail";
 import { notify } from "@/lib/notify";
 import { getSecret } from "@/lib/providers/secrets";
+import { minutesThisMonth } from "@/lib/calls/ingest";
 import { inWindow, israelNow } from "@/lib/time";
 import * as crm from "@/lib/crm/erikscrm";
 import { render, type AutomationSpec, type TriggerType } from "./catalog";
@@ -29,7 +30,6 @@ export interface AutomationEvent {
 }
 
 const MAX_ATTEMPTS = 3;
-const DEDUP_HOURS = 24;
 const BUSINESS = { days: [0, 1, 2, 3, 4], start_minute: 8 * 60, end_minute: 19 * 60 };
 
 const toMinute = (hhmm?: string) => {
@@ -74,7 +74,7 @@ export async function emit(e: AutomationEvent): Promise<void> {
       const spec = a.spec as AutomationSpec;
       if (!matches(spec, e)) continue;
       if (!hoursOk(spec)) continue;
-      await enqueue(db, a.id, e, spec.delay_minutes ?? 0);
+      await enqueue(db, a.id, e, spec.delay_minutes ?? 0).catch((err) => console.error("automations enqueue", a.id, err));
     }
   } catch (err) {
     console.error("automations emit", err);
@@ -82,22 +82,15 @@ export async function emit(e: AutomationEvent): Promise<void> {
 }
 
 async function enqueue(db: Db, automationId: string, e: AutomationEvent, delayMinutes: number) {
-  // The same thing never runs the same automation twice within 24 hours.
-  const since = new Date(Date.now() - DEDUP_HOURS * 3600_000).toISOString();
-  const { count } = await db
-    .from("automation_runs")
-    .select("id", { count: "exact", head: true })
-    .eq("automation_id", automationId)
-    .eq("dedup_key", e.key)
-    .gte("created_at", since);
-  if (count) return;
-  await db.from("automation_runs").insert({
-    automation_id: automationId,
-    client_id: e.clientId,
-    event: e,
-    dedup_key: e.key,
-    run_at: new Date(Date.now() + Math.max(0, delayMinutes) * 60_000).toISOString(),
+  // The same thing never runs the same automation twice within 24 hours (checked atomically).
+  const { error } = await db.rpc("enqueue_automation_run", {
+    p_automation_id: automationId,
+    p_client_id: e.clientId,
+    p_event: e,
+    p_dedup_key: e.key,
+    p_run_at: new Date(Date.now() + Math.max(0, delayMinutes) * 60_000).toISOString(),
   });
+  if (error) throw new Error(error.message);
 }
 
 /** Scheduled triggers (daily / weekly): queued once a day at their minute. */
@@ -210,6 +203,24 @@ async function crmLogCall(ctx: Ctx, i: number, c: Record<string, string>): Promi
   return "השיחה נרשמה בכרטיס הליד ב־CRM";
 }
 
+/** A phone on the client's do-not-call list is never called or texted by an automation. */
+async function assertNotDnc(ctx: Ctx, phone: string) {
+  const { data } = await ctx.db.from("leads").select("status").eq("client_id", ctx.clientId).eq("phone", phone).maybeSingle();
+  if (data?.status === "dnc") throw new SkipError("המספר ברשימת לא להתקשר");
+}
+
+/** Outbound calls stop when the month's minutes are used up (like the call cannon and call-backs). */
+async function assertMinutesLeft(ctx: Ctx) {
+  const { data: client } = await ctx.db.from("clients").select("monthly_minutes").eq("id", ctx.clientId).single();
+  const limit = (client?.monthly_minutes as number | undefined) ?? 0;
+  if (!limit) return;
+  const used = (await minutesThisMonth(ctx.clientId)).get(ctx.clientId)?.minutes ?? 0;
+  if (used >= limit) throw new SkipError("נגמרו דקות החודש");
+}
+
+/** A reason not to act that a retry won't change: the run stops without retries. */
+class SkipError extends Error {}
+
 async function runAction(ctx: Ctx, a: AutomationSpec["actions"][number], i: number): Promise<string> {
   const c = a.config ?? {};
   const phone = ctx.vars.phone;
@@ -217,6 +228,8 @@ async function runAction(ctx: Ctx, a: AutomationSpec["actions"][number], i: numb
     case "call_now": {
       if (!ctx.spec.agent_id) throw new Error("לא נבחר סוכן");
       if (!phone) throw new Error("אין מספר טלפון");
+      await assertNotDnc(ctx, phone);
+      await assertMinutesLeft(ctx);
       const r = await callOut(ctx.spec.agent_id, phone, { name: ctx.vars.name, lead_name: ctx.vars.name });
       if (!r.ok) throw new Error(r.error);
       return `השיחה יצאה מ־${r.from}`;
@@ -224,6 +237,7 @@ async function runAction(ctx: Ctx, a: AutomationSpec["actions"][number], i: numb
     case "sms": {
       if (!ctx.spec.agent_id) throw new Error("לא נבחר סוכן");
       if (!phone) throw new Error("אין מספר טלפון");
+      await assertNotDnc(ctx, phone);
       const from = await outboundNumberFor(ctx.spec.agent_id);
       if (!from) throw new Error("ללקוח אין מספר טלפון");
       await sendSms(from.e164, phone, render(c.text ?? "", ctx.vars));
@@ -316,6 +330,14 @@ async function runOne(db: Db, run: { id: string; automation_id: string; client_i
     await db.from("automation_runs").update({ status: "skipped", finished_at: new Date().toISOString(), last_error: "הלקוח מושהה" }).eq("id", run.id);
     return;
   }
+  // The agent that calls or texts must be this client's own (never another business's).
+  if (spec.agent_id) {
+    const { data: own } = await db.from("agents").select("id").eq("id", spec.agent_id).eq("client_id", run.client_id).maybeSingle();
+    if (!own) {
+      await db.from("automation_runs").update({ status: "skipped", finished_at: new Date().toISOString(), last_error: "הסוכן לא שייך ללקוח" }).eq("id", run.id);
+      return;
+    }
+  }
   const e = run.event;
   const vars: Record<string, string> = {
     name: e.contact?.name ?? "",
@@ -336,25 +358,29 @@ async function runOne(db: Db, run: { id: string; automation_id: string; client_i
   const done = new Set((run.log as { i: number; ok: boolean }[]).filter((l) => l.ok).map((l) => l.i));
   const log = [...(run.log as object[])];
   let failed: string | null = null;
+  let skipped = false;
   for (const [i, action] of spec.actions.entries()) {
     if (done.has(i)) continue;
     try {
       log.push({ i, action: action.type, ok: true, message: await runAction(ctx, action, i), at: new Date().toISOString() });
     } catch (err) {
       failed = err instanceof Error ? err.message : "שגיאה";
+      skipped = err instanceof SkipError;
       log.push({ i, action: action.type, ok: false, message: failed, at: new Date().toISOString() });
       break;
     }
   }
   const attempts = run.attempts + 1;
-  const patch = !failed
+  const patch = skipped
+    ? { status: "skipped", finished_at: new Date().toISOString(), last_error: failed }
+    : !failed
     ? { status: "done", finished_at: new Date().toISOString(), last_error: null }
     : attempts >= MAX_ATTEMPTS
       ? { status: "failed", finished_at: new Date().toISOString(), last_error: failed }
       : { status: "queued", run_at: new Date(Date.now() + attempts * 5 * 60_000).toISOString(), last_error: failed };
   await db.from("automation_runs").update({ ...patch, attempts, log }).eq("id", run.id);
   await db.from("automations").update({ last_run_at: new Date().toISOString() }).eq("id", run.automation_id);
-  if (failed && attempts >= MAX_ATTEMPTS) {
+  if (failed && !skipped && attempts >= MAX_ATTEMPTS) {
     await notify({ clientId: null, kind: "automation_failed", title: `אוטומציה נכשלה אצל ${ctx.client.name}`, body: failed, link: `/admin/automations` });
   }
 }
@@ -372,7 +398,7 @@ export async function runAutomations(): Promise<{ ran: number }> {
     .limit(50);
   let ran = 0;
   for (const run of data ?? []) {
-    const { data: claimed } = await db.from("automation_runs").update({ status: "running" }).eq("id", run.id).eq("status", "queued").select("id").maybeSingle();
+    const { data: claimed } = await db.from("automation_runs").update({ status: "running", claimed_at: new Date().toISOString() }).eq("id", run.id).eq("status", "queued").select("id").maybeSingle();
     if (!claimed) continue;
     try {
       await runOne(db, run as Parameters<typeof runOne>[1]);
@@ -383,6 +409,7 @@ export async function runAutomations(): Promise<{ ran: number }> {
     }
   }
   // Runs stuck in "running" (the server died mid-run) go back to the queue.
-  await db.from("automation_runs").update({ status: "queued" }).eq("status", "running").lt("run_at", new Date(Date.now() - 15 * 60_000).toISOString());
+  // A run is "running" for at most one tick (60 seconds), so 15 minutes means it is stuck.
+  await db.from("automation_runs").update({ status: "queued", claimed_at: null }).eq("status", "running").lt("claimed_at", new Date(Date.now() - 15 * 60_000).toISOString());
   return { ran };
 }
