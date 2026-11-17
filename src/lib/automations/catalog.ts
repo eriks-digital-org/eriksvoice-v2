@@ -223,3 +223,16 @@ export function describe(spec: AutomationSpec): string {
 export function render(text: string, vars: Record<string, string | number | undefined | null>): string {
   return text.replace(/\{\{\s*(\w+)\s*\}\}/g, (_, k: string) => String(vars[k] ?? ""));
 }
+
+/** The weekly summary every new client starts with (Sunday 09:00, by email). */
+export const WEEKLY_REPORT: { name: string; spec: AutomationSpec } = {
+  name: "סיכום שבועי במייל",
+  spec: {
+    trigger: { type: "weekly", config: { day: 0, time: "09:00" } },
+    hours: { mode: "always" },
+    delay_minutes: 0,
+    agent_id: null,
+    actions: [{ type: "report", config: {} }],
+    instruction: "",
+  },
+};

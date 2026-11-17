@@ -161,3 +161,22 @@ export async function backfillClient(clientId: string, perAgent = 50): Promise<n
   }
   return added;
 }
+
+/**
+ * Hourly safety net (from the minute cron): pulls calls the post-call webhook missed, for every
+ * client with agents at the voice provider. Stops at `deadline` so the tick stays short.
+ */
+export async function backfillAll(deadline: number, perAgent = 20): Promise<number> {
+  if (!(await voice.isVoiceConfigured())) return 0;
+  const db = createAdminClient();
+  const { data } = await db.from("agents").select("client_id").not("provider_agent_id", "is", null);
+  let added = 0;
+  for (const id of new Set((data ?? []).map((a) => a.client_id as string))) {
+    if (Date.now() > deadline) break;
+    added += await backfillClient(id, perAgent).catch((e) => {
+      console.error("backfill", id, e);
+      return 0;
+    });
+  }
+  return added;
+}
