@@ -16,12 +16,11 @@ export default async function PortalHome({ params }: { params: Promise<{ slug: s
   const supabase = await createClient();
   const today = israelDayStart().toISOString();
   const since = israelDayStart(new Date(), 13).toISOString();
-  const [{ data: agents }, { data: row }, { data: usage }, { count: callsToday }, { count: meetings }, { count: waiting }, { data: recent }] = await Promise.all([
+  const [{ data: agents }, { data: row }, { data: usage }, { count: callsToday }, { count: waiting }, { data: recent }] = await Promise.all([
     supabase.from("agents").select("id, client_id, type_key, name, status, voice_id, opening_line").eq("client_id", client.id).order("created_at"),
     supabase.from("clients").select("monthly_minutes").eq("id", client.id).maybeSingle(),
     supabase.from("client_month_usage").select("minutes").eq("client_id", client.id).eq("month", `${monthKey()}T00:00:00`).maybeSingle(),
     supabase.from("calls").select("id", { count: "exact", head: true }).eq("client_id", client.id).gte("started_at", today),
-    supabase.from("appointments").select("id", { count: "exact", head: true }).eq("client_id", client.id).eq("status", "booked").gte("starts_at", new Date().toISOString()),
     supabase.from("leads").select("id", { count: "exact", head: true }).eq("client_id", client.id).eq("status", "queued"),
     supabase.from("calls").select("started_at, duration_secs, status, direction, result").eq("client_id", client.id).gte("started_at", since).limit(5000),
   ]);
@@ -33,9 +32,8 @@ export default async function PortalHome({ params }: { params: Promise<{ slug: s
   return (
     <div className="flex flex-col gap-6 sm:gap-8">
       <PageHeader title={`שלום ${first},`} soft="הצוות שלך כאן." />
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         <StatTile label="שיחות היום" value={callsToday ?? 0} />
-        <StatTile label="פגישות קרובות" value={meetings ?? 0} />
         <StatTile label="לידים שמחכים לשיחה" value={waiting ?? 0} />
         <StatTile label="דקות שנשארו החודש" value={left} />
       </div>

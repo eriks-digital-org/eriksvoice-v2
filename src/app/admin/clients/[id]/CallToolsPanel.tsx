@@ -36,7 +36,7 @@ export function CallToolsPanel({ clientId, enabled, meetingMinutes, transferPhon
         </label>
       </div>
       <p className="text-[14px] text-ink-muted">
-        פגישות נקבעות בשעות הפעילות של העסק (שעות החיוג ברשימת החיוג, או א׳–ה׳ 09:00–19:00), בלי חפיפה. מה הסוכן אומר ומתי הוא משתמש בכל כלי נקבע בהוראות שלך לסוכן.
+        הפגישות נבדקות ונקבעות ביומן גוגל של העסק דרך ה־flow שלו ב־Activepieces (חובה להגדיר אותו למטה), בשעות הפעילות של העסק (שעות החיוג ברשימת החיוג, או א׳–ה׳ 09:00–19:00). שום פגישה לא נשמרת ב־EriksVoice. מה הסוכן אומר ומתי הוא משתמש בכל כלי נקבע בהוראות שלך לסוכן.
       </p>
       <div className="flex flex-wrap items-center gap-3">
         <button disabled={pending} className="min-h-12 rounded-full bg-ink px-5 text-[15px] font-medium text-white disabled:opacity-60">

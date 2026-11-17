@@ -1,7 +1,6 @@
 import {
   BellRing,
   BookOpen,
-  CalendarDays,
   Building2,
   FlaskConical,
   Gauge,
@@ -48,7 +47,6 @@ export const portalMainNav: NavItem[] = [
 ];
 
 export const portalMoreNav: NavItem[] = [
-  { to: "/meetings", label: "פגישות", icon: CalendarDays },
   { to: "/leads", label: "רשימת חיוג", icon: ListChecks },
   { to: "/knowledge", label: "מידע על העסק", icon: BookOpen },
   { to: "/connections", label: "חיבורים", icon: Plug },

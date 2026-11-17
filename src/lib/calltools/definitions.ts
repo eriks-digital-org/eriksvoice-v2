@@ -30,7 +30,7 @@ export const CALL_TOOLS: CallToolDef[] = [
   {
     name: "check_availability",
     label: "בדיקת זמינות לפגישה",
-    hint: "מחזיר זמנים פנויים בשעות הפעילות של העסק",
+    hint: "בודק ביומן גוגל של העסק (דרך ה־flow ב־Activepieces) ומציע שעות או ימים פנויים",
     kind: "webhook",
     description: "בודק אילו מועדים פנויים לפגישה. משתמשים בו לפני שמציעים מועד. אפשר לבקש תאריך מסוים.",
     params: {
@@ -40,7 +40,7 @@ export const CALL_TOOLS: CallToolDef[] = [
   {
     name: "book_meeting",
     label: "קביעת פגישה",
-    hint: "קובע פגישה ב־EriksVoice ומפעיל אוטומציות של \"פגישה נקבעה\"",
+    hint: "קובע את הפגישה ביומן גוגל של העסק ומפעיל אוטומציות של \"פגישה נקבעה\"",
     kind: "webhook",
     description: "קובע פגישה במועד פנוי אחרי שהלקוח אישר את המועד. מחזיר אישור או הודעה שהמועד תפוס.",
     params: {
@@ -61,7 +61,7 @@ export const CALL_TOOLS: CallToolDef[] = [
   {
     name: "cancel_meeting",
     label: "ביטול פגישה",
-    hint: "מבטל את הפגישה הקרובה של המתקשר",
+    hint: "מוחק מיומן גוגל של העסק את הפגישה הקרובה של המתקשר",
     kind: "webhook",
     description: "מבטל את הפגישה הקרובה של המתקשר, אחרי שהלקוח ביקש וגם אישר את הביטול. כדי לשנות מועד: מבטלים וקובעים מחדש.",
     params: {},
