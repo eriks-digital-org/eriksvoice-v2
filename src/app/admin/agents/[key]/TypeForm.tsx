@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Field } from "@/components/ds/kit";
 import type { AgentTypeRow } from "@/lib/data/types";
-import { HEBREW_TTS_MODELS, REALTIME_MODELS, type AllowedVoice } from "@/lib/voice/models";
+import { DEFAULT_LLM, HEBREW_TTS_MODELS, REALTIME_MODELS, type AllowedVoice } from "@/lib/voice/models";
 import { saveAgentType, type SaveState } from "./actions";
 import { VoicePicker, type ChosenVoice, type PickerVoice } from "./VoicePicker";
 
@@ -84,7 +84,7 @@ export function TypeForm({
         <Field label="מודל שיחה (LLM)" hint="במצב Realtime לא בשימוש">
           {llms.length ? (
             <select name="llm_model" defaultValue={type.llm_model} className={selectCls} dir="ltr">
-              <option value="">ברירת המחדל של ElevenLabs</option>
+              <option value="">ברירת מחדל ({DEFAULT_LLM})</option>
               {llms.map((m) => (
                 <option key={m} value={m}>
                   {m}

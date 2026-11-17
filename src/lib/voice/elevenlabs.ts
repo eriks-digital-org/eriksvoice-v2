@@ -237,7 +237,9 @@ function body(c: AgentConfig) {
               condition: t.condition,
               delay_ms: 600,
               transfer_message: t.message,
-              enable_transferred_agent_first_message: false,
+              // The receiving agent opens with its own (Hebrew) opening line. Without it, a Realtime
+              // agent that joins mid-call has nothing to anchor on and can drift into another language.
+              enable_transferred_agent_first_message: true,
             })),
           },
         }

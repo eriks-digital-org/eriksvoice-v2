@@ -5,7 +5,7 @@ import * as voice from "@/lib/voice/elevenlabs";
 import { buildPrompt, namedBusiness } from "./prompt";
 import type { AllowedVoice } from "@/lib/voice/models";
 import { routeClientNumbers } from "./phones";
-import { isRealtimeModel } from "@/lib/voice/models";
+import { DEFAULT_LLM, isRealtimeModel } from "@/lib/voice/models";
 import { CALLBACK_FIELDS } from "@/lib/calls/callback-time";
 import { pronunciationFor } from "@/lib/voice/pronunciation";
 import { ensureCallTools } from "@/lib/calltools/provider";
@@ -141,7 +141,7 @@ async function pushAgent(
     prompt,
     firstMessage: agent.opening_line,
     language: type.language || "he",
-    llm: agent.llm_model_override || type.llm_model,
+    llm: agent.llm_model_override || type.llm_model || DEFAULT_LLM,
     voiceId,
     ttsModel: type.tts_model || "eleven_v4_turbo",
     realtimeModel,
