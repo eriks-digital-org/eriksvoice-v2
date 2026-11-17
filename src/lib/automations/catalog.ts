@@ -79,7 +79,7 @@ export const TRIGGERS: { type: TriggerType; label: string; phrase: string; hint:
   { type: "crm_status", label: "סטטוס השתנה ב־CRM", phrase: "ליד משנה סטטוס ב־CRM", hint: "כשמעבירים ליד לשלב אחר ב־ERIKSCRM" },
   { type: "callback_requested", label: "לקוח ביקש שיחזרו אליו", phrase: "לקוח מבקש מהסוכן שיחזרו אליו", hint: "הסוכן יתקשר בעצמו בזמן שביקש. כאן מוסיפים למשל משימה ב־CRM" },
   { type: "meeting_booked", label: "הסוכן קבע פגישה", phrase: "הסוכן קובע פגישה בשיחה", hint: "משתנים: {{meeting_at}} {{meeting_note}} {{meeting_details}} {{meeting_phone}}. למשל SMS ללקוח, או שליחת הפרטים ל־Webhook" },
-  { type: "meeting_cancelled", label: "פגישה בוטלה", phrase: "לקוח מבטל פגישה בשיחה", hint: "משתנה: {{meeting_at}}" },
+  { type: "meeting_cancelled", label: "פגישה בוטלה", phrase: "לקוח מבטל פגישה בשיחה", hint: "משתנים: {{meeting_at}} {{agent}}" },
   { type: "agent_action", label: "הסוכן ביקש פעולה", phrase: "הסוכן מבקש פעולה מותאמת בשיחה", hint: "הכלי \"פעולה מותאמת\". משתנים: {{action}} {{details}}" },
   { type: "daily", label: "כל יום בשעה קבועה", phrase: "כל יום", hint: "למשל סיכום יומי" },
   { type: "weekly", label: "פעם בשבוע", phrase: "פעם בשבוע", hint: "למשל דוח שבועי" },

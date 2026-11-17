@@ -6,6 +6,7 @@ import { requireAdmin } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { parseSpec } from "@/lib/automations/validate";
 import { CATEGORIES } from "@/lib/automations/catalog";
+import { notify } from "@/lib/notify";
 
 export type TemplateState = { error?: string; ok?: string };
 
@@ -54,5 +55,31 @@ export async function templateRowAction(form: FormData) {
   // Deleting a template keeps the clients' copies (template_id becomes null).
   if (op === "delete") await db.from("automation_templates").delete().eq("id", id);
   if (op === "hide" || op === "show") await db.from("automation_templates").update({ hidden: op === "hide" }).eq("id", id);
+  revalidatePath("/admin/automations");
+}
+
+/** The office built the client's Activepieces flow for this automation: it starts running and the client hears about it. */
+export async function markBuiltAction(form: FormData) {
+  await requireAdmin();
+  const db = createAdminClient();
+  const id = String(form.get("id"));
+  const { data: a } = await db
+    .from("automations")
+    .update({ build_status: "built", built_at: new Date().toISOString() })
+    .eq("id", id)
+    .eq("build_status", "pending")
+    .select("name, client_id, clients(slug)")
+    .maybeSingle();
+  if (a) {
+    const slug = (a.clients as unknown as { slug: string } | null)?.slug ?? "";
+    await notify({
+      clientId: a.client_id as string,
+      kind: "automation_built",
+      title: `האוטומציה ״${a.name as string}״ מוכנה ופועלת`,
+      body: "סיימנו לבנות אותה בחשבון שלכם, והיא פועלת מעכשיו.",
+      link: slug ? `/${slug}/automations` : undefined,
+      email: true,
+    });
+  }
   revalidatePath("/admin/automations");
 }

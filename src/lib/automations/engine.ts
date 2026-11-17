@@ -69,7 +69,7 @@ export async function emit(e: AutomationEvent): Promise<void> {
     const db = createAdminClient();
     const { data: client } = await db.from("clients").select("status").eq("id", e.clientId).maybeSingle();
     if (!client || client.status === "paused") return;
-    const { data } = await db.from("automations").select("id, spec").eq("client_id", e.clientId).eq("enabled", true);
+    const { data } = await db.from("automations").select("id, spec").eq("client_id", e.clientId).eq("enabled", true).neq("build_status", "pending");
     for (const a of data ?? []) {
       const spec = a.spec as AutomationSpec;
       if (!matches(spec, e)) continue;
@@ -97,7 +97,7 @@ async function enqueue(db: Db, automationId: string, e: AutomationEvent, delayMi
 async function enqueueScheduled(db: Db) {
   const { day, minute } = israelNow();
   const date = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Jerusalem" });
-  const { data } = await db.from("automations").select("id, client_id, spec").eq("enabled", true).in("spec->trigger->>type", ["daily", "weekly"]);
+  const { data } = await db.from("automations").select("id, client_id, spec").eq("enabled", true).neq("build_status", "pending").in("spec->trigger->>type", ["daily", "weekly"]);
   for (const a of data ?? []) {
     const spec = a.spec as AutomationSpec;
     const at = toMinute(spec.trigger.config?.time) ?? 9 * 60;
@@ -319,9 +319,10 @@ async function runAction(ctx: Ctx, a: AutomationSpec["actions"][number], i: numb
 }
 
 async function runOne(db: Db, run: { id: string; automation_id: string; client_id: string; event: AutomationEvent; attempts: number; log: unknown[] }) {
-  const { data: a } = await db.from("automations").select("enabled, spec").eq("id", run.automation_id).maybeSingle();
-  if (!a?.enabled) {
-    await db.from("automation_runs").update({ status: "skipped", finished_at: new Date().toISOString(), last_error: "האוטומציה כבויה" }).eq("id", run.id);
+  const { data: a } = await db.from("automations").select("enabled, spec, build_status").eq("id", run.automation_id).maybeSingle();
+  if (!a?.enabled || a.build_status === "pending") {
+    const why = a?.build_status === "pending" ? "האוטומציה עדיין בבנייה" : "האוטומציה כבויה";
+    await db.from("automation_runs").update({ status: "skipped", finished_at: new Date().toISOString(), last_error: why }).eq("id", run.id);
     return;
   }
   const spec = a.spec as AutomationSpec;
@@ -344,7 +345,7 @@ async function runOne(db: Db, run: { id: string; automation_id: string; client_i
     phone: e.contact?.phone ?? "",
     email: e.contact?.email ?? "",
     summary: e.call?.summary ?? "",
-    agent: e.call?.agentName ?? "",
+    agent: e.call?.agentName ?? (typeof e.data?.agent_name === "string" ? e.data.agent_name : ""),
     business: client?.name ?? "",
     direction: e.call ? ({ inbound: "נכנסת", outbound: "יוצאת", web: "דפדפן" } as Record<string, string>)[e.call.direction] ?? "" : "",
     duration: e.call ? `${Math.round(e.call.duration / 60)} דק׳` : "",

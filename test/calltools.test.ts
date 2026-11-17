@@ -48,3 +48,24 @@ describe("tool definitions", () => {
     expect(new Set(CALL_TOOLS.map((t) => t.name)).size).toBe(CALL_TOOLS.length);
   });
 });
+
+import { nextBuildStatus } from "@/lib/automations/build";
+import { EMPTY_SPEC, type AutomationSpec } from "@/lib/automations/catalog";
+
+describe("automation build status", () => {
+  const plain: AutomationSpec = { ...EMPTY_SPEC, actions: [{ type: "notify_team", config: {} }] };
+  const ap: AutomationSpec = { ...EMPTY_SPEC, actions: [{ type: "activepieces", config: { action: "gmail_send" } }] };
+  it("our own actions are ready at once", () => {
+    expect(nextBuildStatus(plain)).toEqual({ status: "ready", notify: false });
+  });
+  it("an Activepieces action is sent to the office once", () => {
+    expect(nextBuildStatus(ap)).toEqual({ status: "pending", notify: true });
+    expect(nextBuildStatus(ap, { spec: ap, build_status: "pending" })).toEqual({ status: "pending", notify: false });
+    expect(nextBuildStatus({ ...ap, delay_minutes: 5 }, { spec: ap, build_status: "built" })).toEqual({ status: "built", notify: false });
+  });
+  it("changing the Activepieces part sends it again", () => {
+    const changed: AutomationSpec = { ...EMPTY_SPEC, actions: [{ type: "activepieces", config: { action: "sheets_append" } }] };
+    expect(nextBuildStatus(changed, { spec: ap, build_status: "built" })).toEqual({ status: "pending", notify: true });
+    expect(nextBuildStatus(ap, { spec: plain, build_status: "ready" })).toEqual({ status: "pending", notify: true });
+  });
+});
