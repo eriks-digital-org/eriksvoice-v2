@@ -14,6 +14,7 @@ import { inWindow } from "@/lib/time";
 import { windowOf } from "@/lib/calls/callback";
 import { israelTime, nextInWindow, type CallWindow } from "@/lib/calls/callback-time";
 import * as crm from "@/lib/crm/erikscrm";
+import { NoCalendar, callFlow, parseEvents, requireFlow } from "./calendar";
 
 type Db = ReturnType<typeof createAdminClient>;
 
@@ -89,19 +90,16 @@ export function freeSlots(o: {
   return out;
 }
 
-async function busyOf(db: Db, clientId: string, from: Date, to: Date) {
-  const { data } = await db
-    .from("appointments")
-    .select("starts_at, duration_minutes")
-    .eq("client_id", clientId)
-    .eq("status", "booked")
-    .gte("starts_at", new Date(from.getTime() - 8 * 3600_000).toISOString())
-    .lt("starts_at", to.toISOString());
-  return (data ?? []).map((a) => {
-    const start = new Date(a.starts_at as string).getTime();
-    return { start, end: start + (a.duration_minutes as number) * 60_000 };
-  });
+/** Busy times in the business's calendar (Activepieces → Google Calendar). */
+async function busyOf(ctx: ToolCtx, from: Date, to: Date) {
+  const url = await requireFlow(ctx.db, ctx.clientId);
+  const events = parseEvents(await callFlow(url, ctx.client.slug, "calendar_events", { from: from.toISOString(), to: to.toISOString(), timezone: "Asia/Jerusalem" }));
+  return events.map((e) => ({ start: e.start, end: e.end }));
 }
+
+const NO_CALENDAR = "לעסק לא מחובר יומן, אז אי אפשר לקבוע פגישה בשיחה. מציעים שהצוות יחזור ללקוח (notify_team).";
+const CALENDAR_DOWN = "היומן של העסק לא זמין כרגע. מציעים שהצוות יחזור ללקוח לקביעת מועד (notify_team).";
+const calendarError = (e: unknown) => say(e instanceof NoCalendar ? NO_CALENDAR : CALENDAR_DOWN);
 
 async function leadOf(ctx: ToolCtx) {
   if (!ctx.phone) return null;
@@ -115,18 +113,30 @@ async function checkAvailability(ctx: ToolCtx): Promise<ToolAnswer> {
   const w = await windowOf(ctx.db, ctx.clientId);
   const date = str(ctx.body.date, 10);
   const day = /^\d{4}-\d{2}-\d{2}$/.test(date) ? parseIsraelTime(`${date} 00:00`) : null;
-  const from = day ?? new Date();
-  const days = day ? 1 : 7;
-  const busy = await busyOf(ctx.db, ctx.clientId, from, new Date(from.getTime() + (days + 1) * 86400_000));
-  let slots = freeSlots({ from, days, minutes: ctx.client.meeting_minutes, window: w, busy, limit: 8 });
+  const now = new Date();
+  // One look at the calendar: the asked day, or the next 14 days.
+  const from = day && day.getTime() > now.getTime() - 86400_000 ? day : now;
+  const span = day ? 1 : 14;
+  let busy;
+  try {
+    busy = await busyOf(ctx, from, new Date(from.getTime() + (span + 1) * 86400_000));
+  } catch (e) {
+    return calendarError(e);
+  }
+  let slots = freeSlots({ from, days: span, minutes: ctx.client.meeting_minutes, window: w, busy, limit: 8 });
   let note = "";
   if (!slots.length && day) {
-    slots = freeSlots({ from: new Date(), days: 14, minutes: ctx.client.meeting_minutes, window: w, busy: await busyOf(ctx.db, ctx.clientId, new Date(), new Date(Date.now() + 15 * 86400_000)), limit: 6 });
+    try {
+      busy = await busyOf(ctx, now, new Date(now.getTime() + 15 * 86400_000));
+    } catch (e) {
+      return calendarError(e);
+    }
+    slots = freeSlots({ from: now, days: 14, minutes: ctx.client.meeting_minutes, window: w, busy, limit: 6 });
     note = "אין מקום בתאריך שביקשו. ";
   }
-  if (!slots.length) return say("אין מועדים פנויים בשבועיים הקרובים. אפשר להציע שהצוות יחזור ללקוח.");
+  if (!slots.length) return say("אין מועדים פנויים בשבועיים הקרובים. מציעים שהצוות יחזור ללקוח.");
   return say(
-    `${note}עכשיו ${whenText(new Date())}. מועדים פנויים (פגישה של ${ctx.client.meeting_minutes} דקות): ` +
+    `${note}עכשיו ${whenText(now)}. מועדים פנויים (פגישה של ${ctx.client.meeting_minutes} דקות): ` +
       slots.map((s) => `${whenText(s)} [${slotText(s)}]`).join("; ") +
       ". כדי לקבוע: book_meeting עם start בפורמט שבסוגריים.",
   );
@@ -138,85 +148,125 @@ async function bookMeeting(ctx: ToolCtx): Promise<ToolAnswer> {
   if (start.getTime() < Date.now() + 30 * 60_000) return say("המועד כבר עבר או קרוב מדי. בודקים מועדים פנויים עם check_availability.");
   const w = await windowOf(ctx.db, ctx.clientId);
   if (!fitsWindow(start, ctx.client.meeting_minutes, w)) return say("המועד מחוץ לשעות הפעילות של העסק. בודקים מועדים פנויים עם check_availability.");
-  const name = str(ctx.body.name, 120);
-  const email = str(ctx.body.email, 200);
-  const note = str(ctx.body.note, 1000);
+  const end = new Date(start.getTime() + ctx.client.meeting_minutes * 60_000);
   const lead = await leadOf(ctx);
-  const { data: id, error } = await ctx.db.rpc("book_appointment", {
-    p_client_id: ctx.clientId,
-    p_agent_id: ctx.agentId,
-    p_lead_id: lead?.id ?? null,
-    p_name: name || lead?.name || "",
-    p_phone: ctx.phone,
-    p_email: EMAIL.test(email) ? email : (lead?.email ?? ""),
-    p_starts_at: start.toISOString(),
-    p_minutes: ctx.client.meeting_minutes,
-    p_note: note,
-    p_conversation_id: ctx.conversationId || null,
-  });
-  if (error) throw new Error(error.message);
-  if (!id) return say("המועד הזה כבר תפוס. בודקים מועדים פנויים אחרים עם check_availability.");
+  const name = str(ctx.body.name, 120) || lead?.name || "";
+  const given = str(ctx.body.email, 200);
+  const email = EMAIL.test(given) ? given : (lead?.email ?? "");
+  const note = str(ctx.body.note, 1000);
+  const details = str(ctx.body.details, 3000);
+  const other = toE164(str(ctx.body.phone, 30)) ?? "";
+  const backPhone = other && other !== ctx.phone ? other : "";
+  let id = "";
+  try {
+    // Taken in the meantime?
+    const busy = await busyOf(ctx, new Date(start.getTime() - 8 * 3600_000), end);
+    if (busy.some((b) => b.start < end.getTime() && b.end > start.getTime())) {
+      return say("המועד הזה כבר תפוס ביומן. בודקים מועדים פנויים אחרים עם check_availability.");
+    }
+    const url = await requireFlow(ctx.db, ctx.clientId);
+    const created = await callFlow(url, ctx.client.slug, "calendar_create", {
+      start: start.toISOString(),
+      end: end.toISOString(),
+      timezone: "Asia/Jerusalem",
+      title: `פגישה: ${name || ctx.phone || "לקוח"}`.slice(0, 200),
+      // The phone in the description lets the agent find the caller's meetings later.
+      description: [note, details, name && `שם: ${name}`, ctx.phone && `טלפון: ${ctx.phone}`, backPhone && `טלפון לחזרה: ${backPhone}`, email && `מייל: ${email}`, `נקבע על ידי ${ctx.agentName}`]
+        .filter(Boolean)
+        .join("\n"),
+      name,
+      phone: ctx.phone,
+      email,
+    });
+    id = String((created as { id?: unknown } | null)?.id ?? "");
+  } catch (e) {
+    return calendarError(e);
+  }
 
   const at = whenText(start);
   await emit({
     type: "meeting_booked",
     clientId: ctx.clientId,
-    key: `meeting:${id}`,
-    contact: { name: name || lead?.name || "", phone: ctx.phone, email: EMAIL.test(email) ? email : (lead?.email ?? ""), leadId: lead?.id },
+    key: `meeting:${id || `${ctx.conversationId}:${start.toISOString()}`}`,
+    contact: { name, phone: ctx.phone, email, leadId: lead?.id },
     lead: lead ? { id: lead.id, tags: lead.tags ?? [] } : undefined,
-    data: { meeting_at: at, meeting_start: slotText(start), meeting_note: note, meeting_minutes: ctx.client.meeting_minutes },
+    data: { meeting_at: at, meeting_start: slotText(start), meeting_note: note, meeting_details: details, meeting_minutes: ctx.client.meeting_minutes, meeting_phone: backPhone || ctx.phone },
   });
-  // Also a meeting on the lead's card in the CRM, when it is connected (best effort).
-  if (ctx.phone && (await crm.crmConnected(ctx.clientId))) {
-    try {
-      const card = await crm.ensureLead(ctx.clientId, ctx.phone, name, `ev-meet-${id}-lead`);
-      await crm.addTask(
-        ctx.clientId,
-        card.id,
-        { title: `פגישה: ${name || ctx.phone}`.slice(0, 200), starts_at: start.toISOString(), duration_seconds: ctx.client.meeting_minutes * 60, kind: "meeting", ...(note ? { note } : {}) },
-        `ev-meet-${id}`,
-      );
-    } catch (e) {
-      console.error("call tools: CRM meeting", (e as Error).message);
-    }
+
+  // What the caller told us stays on their lead card.
+  if (lead && ((!lead.name && name) || (!lead.email && email))) {
+    await ctx.db.from("leads").update({ ...(lead.name ? {} : { name }), ...(lead.email ? {} : { email }) }).eq("id", lead.id);
   }
-  return say(`הפגישה נקבעה ל${at}.`);
+  const lines = [`מועד: ${at} (${ctx.client.meeting_minutes} דקות)`, note && `נושא: ${note}`, details && `פרטים: ${details}`];
+  const [mailed] = await Promise.all([
+    email
+      ? sendMail([email], `הפגישה שלך עם ${ctx.client.name} נקבעה`, [`שלום ${name || ""},`.trim(), `קבענו לך פגישה עם ${ctx.client.name}.`, ...lines.slice(0, 2)].filter(Boolean).join("\n"))
+      : Promise.resolve(false),
+    notify({
+      clientId: ctx.clientId,
+      kind: "meeting",
+      title: `נקבעה פגישה: ${name || ctx.phone || "לקוח"}, ${at}`.slice(0, 200),
+      body: [...lines, `טלפון: ${backPhone || ctx.phone || "לא ידוע"}`, email && `מייל: ${email}`, `נקבע על ידי ${ctx.agentName}`].filter(Boolean).join("\n"),
+      link: `/${ctx.client.slug}/calls`,
+      email: true,
+    }),
+  ]);
+  return say(`הפגישה נקבעה ל${at}.${mailed ? " אישור נשלח ללקוח במייל." : ""}`);
 }
 
+/** The caller's upcoming meetings in the business's calendar (by the phone in the event). */
 async function upcoming(ctx: ToolCtx) {
-  if (!ctx.phone) return [];
-  const { data } = await ctx.db
-    .from("appointments")
-    .select("id, starts_at, note, name, email")
-    .eq("client_id", ctx.clientId)
-    .eq("phone", ctx.phone)
-    .eq("status", "booked")
-    .gt("starts_at", new Date().toISOString())
-    .order("starts_at")
-    .limit(5);
-  return (data ?? []) as { id: string; starts_at: string; note: string; name: string; email: string }[];
+  const url = await requireFlow(ctx.db, ctx.clientId);
+  const now = new Date();
+  const raw = await callFlow(url, ctx.client.slug, "calendar_events", {
+    from: now.toISOString(),
+    to: new Date(now.getTime() + 60 * 86400_000).toISOString(),
+    timezone: "Asia/Jerusalem",
+    phone: ctx.phone,
+  });
+  const local = ctx.phone.replace(/^\+972/, "0");
+  return parseEvents(raw)
+    .filter((e) => e.start > now.getTime() && (e.description.includes(ctx.phone) || e.description.includes(local) || e.title.includes(local)))
+    .sort((a, b) => a.start - b.start)
+    .slice(0, 5);
 }
 
 async function myMeetings(ctx: ToolCtx): Promise<ToolAnswer> {
   if (!ctx.phone) return say("המספר של המתקשר לא ידוע, אז אין אפשרות לבדוק.");
-  const list = await upcoming(ctx);
-  if (!list.length) return say("למתקשר אין פגישות קרובות.");
-  return say(`פגישות קרובות: ${list.map((a) => `${whenText(new Date(a.starts_at))}${a.note ? ` (${a.note})` : ""}`).join("; ")}.`);
+  try {
+    const list = await upcoming(ctx);
+    if (!list.length) return say("למתקשר אין פגישות קרובות ביומן.");
+    return say(`פגישות קרובות: ${list.map((e) => whenText(new Date(e.start))).join("; ")}.`);
+  } catch (e) {
+    return calendarError(e);
+  }
 }
 
 async function cancelMeeting(ctx: ToolCtx): Promise<ToolAnswer> {
-  const [next] = await upcoming(ctx);
-  if (!next) return say("לא נמצאה פגישה קרובה למספר הזה.");
-  await ctx.db.from("appointments").update({ status: "cancelled" }).eq("id", next.id).eq("status", "booked");
-  const at = whenText(new Date(next.starts_at));
-  await emit({
-    type: "meeting_cancelled",
-    clientId: ctx.clientId,
-    key: `meeting:${next.id}:cancelled`,
-    contact: { name: next.name, phone: ctx.phone, email: next.email },
-    data: { meeting_at: at },
-  });
-  return say(`הפגישה של ${at} בוטלה.`);
+  if (!ctx.phone) return say("המספר של המתקשר לא ידוע.");
+  try {
+    const [next] = await upcoming(ctx);
+    if (!next) return say("לא נמצאה פגישה קרובה למספר הזה ביומן.");
+    if (!next.id) return say("הפגישה נמצאה אבל אי אפשר לבטל אותה מכאן. מעבירים לצוות (notify_team).");
+    await callFlow(await requireFlow(ctx.db, ctx.clientId), ctx.client.slug, "calendar_delete", { event_id: next.id });
+    const at = whenText(new Date(next.start));
+    const lead = await leadOf(ctx);
+    await emit({
+      type: "meeting_cancelled",
+      clientId: ctx.clientId,
+      key: `meeting:${next.id}:cancelled`,
+      contact: { name: lead?.name ?? "", phone: ctx.phone, email: lead?.email ?? "", leadId: lead?.id },
+      data: { meeting_at: at },
+    });
+    const who = lead?.name || ctx.phone;
+    await Promise.all([
+      lead?.email ? sendMail([lead.email], `הפגישה שלך עם ${ctx.client.name} בוטלה`, `הפגישה של ${at} בוטלה לבקשתך.`) : null,
+      notify({ clientId: ctx.clientId, kind: "meeting", title: `פגישה בוטלה: ${who}, ${at}`.slice(0, 200), body: `בוטלה בשיחה עם ${ctx.agentName}.`, link: `/${ctx.client.slug}/calls`, email: true }),
+    ]);
+    return say(`הפגישה של ${at} בוטלה.`);
+  } catch (e) {
+    return calendarError(e);
+  }
 }
 
 async function sendSmsTool(ctx: ToolCtx): Promise<ToolAnswer> {

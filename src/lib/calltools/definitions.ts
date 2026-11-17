@@ -30,7 +30,7 @@ export const CALL_TOOLS: CallToolDef[] = [
   {
     name: "check_availability",
     label: "בדיקת זמינות לפגישה",
-    hint: "מחזיר זמנים פנויים בשעות הפעילות של העסק",
+    hint: "בודק ביומן גוגל של העסק (דרך ה־flow ב־Activepieces) ומציע שעות או ימים פנויים",
     kind: "webhook",
     description: "בודק אילו מועדים פנויים לפגישה. משתמשים בו לפני שמציעים מועד. אפשר לבקש תאריך מסוים.",
     params: {
@@ -40,14 +40,17 @@ export const CALL_TOOLS: CallToolDef[] = [
   {
     name: "book_meeting",
     label: "קביעת פגישה",
-    hint: "קובע פגישה, ומעדכן CRM ואוטומציות של \"פגישה נקבעה\"",
+    hint: "קובע ביומן גוגל של העסק, שולח אישור במייל ללקוח ולצוות העסק ומפעיל אוטומציות של \"פגישה נקבעה\"",
     kind: "webhook",
-    description: "קובע פגישה במועד פנוי אחרי שהלקוח אישר את המועד. מחזיר אישור או הודעה שהמועד תפוס.",
+    description:
+      "קובע פגישה במועד פנוי אחרי שהלקוח אישר את המועד. לפני הקביעה אוספים מהלקוח שם מלא, מייל לשליחת ההזמנה (מבקשים לאיית), ואת שאר הפרטים שהעסק צריך לפגישה. מחזיר אישור או הודעה שהמועד תפוס.",
     params: {
       start: { type: "string", description: "מועד הפגישה בשעון ישראל, בפורמט YYYY-MM-DD HH:MM", required: true },
       name: { type: "string", description: "השם המלא של הלקוח", required: true },
-      email: { type: "string", description: "כתובת מייל אם הלקוח מסר" },
-      note: { type: "string", description: "נושא הפגישה או פרטים חשובים, במשפט קצר" },
+      email: { type: "string", description: "כתובת המייל של הלקוח, לשליחת ההזמנה" },
+      phone: { type: "string", description: "טלפון לחזרה, רק אם הלקוח נתן מספר אחר מהמספר שממנו הוא מדבר" },
+      note: { type: "string", description: "נושא הפגישה, במשפט קצר" },
+      details: { type: "string", description: "כל שאר הפרטים שנאספו מהלקוח לפגישה (למשל כתובת, מה הוא צריך, שאלות שענה עליהן)" },
     },
   },
   {
@@ -61,7 +64,7 @@ export const CALL_TOOLS: CallToolDef[] = [
   {
     name: "cancel_meeting",
     label: "ביטול פגישה",
-    hint: "מבטל את הפגישה הקרובה של המתקשר",
+    hint: "מוחק מיומן גוגל של העסק את הפגישה הקרובה של המתקשר ומעדכן במייל את הלקוח ואת הצוות",
     kind: "webhook",
     description: "מבטל את הפגישה הקרובה של המתקשר, אחרי שהלקוח ביקש וגם אישר את הביטול. כדי לשנות מועד: מבטלים וקובעים מחדש.",
     params: {},
