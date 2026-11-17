@@ -1,3 +1,9 @@
+/**
+ * The conversation model when none is chosen. The provider's own default changes over time and
+ * some of its models drift into other languages (e.g. Chinese) mid-call, so we always send one.
+ */
+export const DEFAULT_LLM = "gemini-2.5-flash";
+
 /** Speech models that speak Hebrew (Flash and Turbo v2.5 do not). */
 export const HEBREW_TTS_MODELS = [
   { id: "eleven_v4_turbo", label: "v4 Turbo (מומלץ)" },
